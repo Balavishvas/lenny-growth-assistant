@@ -1,4 +1,4 @@
-"""FastAPI entry point for Lenny Growth Assistant."""
+""""FastAPI entry point for Lenny Growth Assistant."""
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -26,10 +26,10 @@ def database_health() -> dict[str, str]:
     try:
         check_database_connection()
     except SQLAlchemyError:
-        # Avoid returning driver details or credentials in the API response.
+        # Do not expose database credentials or low-level driver details.
         raise HTTPException(
             status_code=503,
-            detail="Database unavailable. Check the local DATABASE_URL and PostgreSQL service.",
+            detail="Database unavailable. Check DATABASE_URL and the PostgreSQL service.",
         ) from None
 
     return {"status": "ok", "database": "connected"}
