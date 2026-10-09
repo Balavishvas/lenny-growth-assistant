@@ -31,6 +31,9 @@ data/local/
 logs/
 *.log
 
+# External source corpus: download locally; do not redistribute by default
+data-source/
+
 # Frontend
 node_modules/
 .next/

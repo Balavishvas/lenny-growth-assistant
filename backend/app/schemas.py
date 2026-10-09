@@ -1,4 +1,4 @@
-"""Pydantic request and response schemas for chat persistence."""
+"""Pydantic request and response schemas for chat and retrieval APIs."""
 
 from datetime import datetime
 from typing import Any, Literal
@@ -54,3 +54,21 @@ class ChatResponse(BaseModel):
     answer: str
     provider: str
     model: str
+
+
+class RetrievalSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=4000)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class RetrievedSource(BaseModel):
+    chunk_id: str
+    source_id: str
+    source_type: str
+    title: str
+    guest: str | None = None
+    url: str | None = None
+    publish_date: str | None = None
+    chunk_index: int
+    content: str
+    distance: float

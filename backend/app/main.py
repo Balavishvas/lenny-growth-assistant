@@ -5,29 +5,44 @@ from collections.abc import Generator
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app import models  # noqa: F401 - registers chat tables with Base.metadata
 from app.config import get_settings
 from app.database import Base, SessionLocal, check_database_connection, engine
-from app import models  # noqa: F401 - registers ORM tables with Base.metadata
-from app.models import ChatMessage, ChatSession
-from app.schemas import ChatRequest, ChatResponse, MessageCreate, MessageRead, SessionCreate, SessionDetail, SessionRead
+from app.knowledge_models import DocumentChunk  # noqa: F401 - registers vector table
 from app.llm import generate_reply
+from app.models import ChatMessage, ChatSession
+from app.retrieval import retrieve_chunks
+from app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    MessageCreate,
+    MessageRead,
+    RetrievalSearchRequest,
+    RetrievedSource,
+    SessionCreate,
+    SessionDetail,
+    SessionRead,
+)
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Create initial tables for the assessment MVP."""
+    """Ensure pgvector exists before creating the application's tables."""
+    with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(bind=engine)
     yield
 
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.0",
+    version="0.3.0",
     description="Evidence-grounded assistant for product and growth research.",
     lifespan=lifespan,
 )
@@ -50,7 +65,7 @@ def health() -> dict[str, str]:
 
 @app.get("/health/database", tags=["operations"])
 def database_health() -> dict[str, str]:
-    """Check whether the configured database can execute a simple query."""
+    """Check whether PostgreSQL can execute a simple query."""
     try:
         check_database_connection()
     except SQLAlchemyError:
@@ -118,6 +133,27 @@ def create_message(
     return message
 
 
+@app.post("/api/v1/retrieval/search", response_model=list[RetrievedSource], tags=["retrieval"])
+def search_knowledge(
+    payload: RetrievalSearchRequest,
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Search indexed podcast passages; run ingestion before expecting results."""
+    try:
+        return retrieve_chunks(payload.query, db, payload.top_k)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="The local embedding model timed out.") from None
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not reach Ollama. Check that Ollama is running and the embedding model is installed.",
+        ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except RuntimeError:
+        raise HTTPException(status_code=502, detail="The configured embedding provider is unavailable.") from None
+
+
 @app.post("/api/v1/chat", response_model=ChatResponse, tags=["chat"])
 def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict[str, str]:
     """Generate a local-model reply and persist both sides of the exchange."""
@@ -125,7 +161,6 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict[str, str]:
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Keep the prompt bounded: use recent conversation turns, then the new message.
     previous_messages = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == payload.session_id)
