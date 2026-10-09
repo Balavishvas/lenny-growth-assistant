@@ -1,8 +1,8 @@
 # Lenny Growth Assistant
 
-A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and newsletter content. The project is being built as a take-home assessment for a Forward Deployed Engineer role.
+A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and newsletter content. This is a take-home assessment project for a Forward Deployed Engineer role.
 
-> **Status:** Foundation/design phase. Runtime behavior and integrations are not implemented yet.
+> **Status:** Initial documentation and FastAPI health-check slice committed. Chat, persistence, retrieval, agent integration, and UI are still planned.
 
 ## Product goals
 
@@ -17,24 +17,26 @@ A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and n
 
 - **API:** Python + FastAPI
 - **Persistence:** PostgreSQL
-- **Local inference:** Ollama (initially testing qwen2.5:3b and qwen2.5:7b)
+- **Local inference:** Ollama (testing qwen2.5:3b and qwen2.5:7b)
 - **Agent runtime:** Pi Coding Agent integration, subject to a compatibility spike
 - **Retrieval:** transcript ingestion, chunking, embeddings, retrieval, and source attribution
 - **Frontend:** chat UI with a side-by-side artifact viewer
 - **Operations:** Docker Compose, environment-based configuration, tests, and structured logging
 
-The agent runtime is intentionally a validation item: Pi's SDK is TypeScript-oriented while the required API is FastAPI/Python. The implementation will choose and document a reliable integration boundary instead of assuming the two runtimes interoperate directly.
+Pi's SDK is TypeScript-oriented while the required API is FastAPI/Python. We will validate the integration boundary before treating it as a final design decision.
 
 ## Project documents
 
 - [Product requirements (PRD)](docs/PRD.md)
 - [Architecture and key decisions](docs/architecture.md)
+- [Local development and testing](docs/DEVELOPMENT.md)
 
-## Development status
+## Current status
 
 - [x] Public repository created
-- [ ] PRD and architecture reviewed
-- [ ] FastAPI health endpoint and configuration
+- [x] PRD and architecture documentation
+- [x] Environment settings and safe example configuration
+- [x] FastAPI health endpoint and smoke test
 - [ ] PostgreSQL sessions and message persistence
 - [ ] Transcript ingestion and retrieval with citations
 - [ ] Agent orchestration and provider switching
@@ -45,9 +47,23 @@ The agent runtime is intentionally a validation item: Pi's SDK is TypeScript-ori
 - [ ] Docker Compose and handoff documentation
 - [ ] Demo recording
 
-## Local development
+## Quick start
 
-The exact one-command setup will be documented once the initial application skeleton and Docker configuration are in place. Do not commit API keys, local environment files, transcript content you do not have rights to redistribute, or other secrets.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for complete setup and test instructions.
+
+In short, from the repository root in PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:PYTHONPATH = "backend"
+uvicorn app.main:app --reload
+```
+
+Then visit http://127.0.0.1:8000/health and http://127.0.0.1:8000/docs.
+
+The current health endpoint checks API liveness only; it does not yet verify PostgreSQL or Ollama readiness.
 
 ## Assessment principles
 
@@ -56,3 +72,5 @@ The exact one-command setup will be documented once the initial application skel
 3. Validate model and agent-runtime compatibility early.
 4. Test failure paths, not only the happy path.
 5. Keep the implementation explainable and operable.
+
+Do not commit real credentials, local `.env` files, or source material unless redistribution is permitted.
