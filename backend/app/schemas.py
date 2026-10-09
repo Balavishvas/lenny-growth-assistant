@@ -40,3 +40,17 @@ class SessionRead(BaseModel):
 
 class SessionDetail(SessionRead):
     messages: list[MessageRead]
+
+
+class ChatRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=36)
+    message: str = Field(min_length=1, max_length=30000)
+
+
+class ChatResponse(BaseModel):
+    session_id: str
+    user_message_id: str
+    assistant_message_id: str
+    answer: str
+    provider: str
+    model: str
