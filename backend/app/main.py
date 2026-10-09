@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 from collections.abc import Generator
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -11,7 +12,8 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, check_database_connection, engine
 from app import models  # noqa: F401 - registers ORM tables with Base.metadata
 from app.models import ChatMessage, ChatSession
-from app.schemas import MessageCreate, MessageRead, SessionCreate, SessionDetail, SessionRead
+from app.schemas import ChatRequest, ChatResponse, MessageCreate, MessageRead, SessionCreate, SessionDetail, SessionRead
+from app.llm import generate_reply
 
 settings = get_settings()
 
@@ -114,3 +116,70 @@ def create_message(
     db.commit()
     db.refresh(message)
     return message
+
+
+@app.post("/api/v1/chat", response_model=ChatResponse, tags=["chat"])
+def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict[str, str]:
+    """Generate a local-model reply and persist both sides of the exchange."""
+    session = db.get(ChatSession, payload.session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Keep the prompt bounded: use recent conversation turns, then the new message.
+    previous_messages = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == payload.session_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(12)
+        .all()
+    )
+    previous_messages.reverse()
+    conversation = [
+        {"role": item.role, "content": item.content}
+        for item in previous_messages
+        if item.role in {"user", "assistant"}
+    ]
+    conversation.append({"role": "user", "content": payload.message})
+
+    user_message = ChatMessage(
+        session_id=payload.session_id,
+        role="user",
+        content=payload.message,
+        message_metadata={},
+    )
+    db.add(user_message)
+    session.updated_at = models.utc_now()
+    db.commit()
+    db.refresh(user_message)
+
+    try:
+        answer = generate_reply(conversation)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="The local model timed out. Try again.") from None
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not reach Ollama. Check that Ollama is running and the configured model is installed.",
+        ) from None
+    except (RuntimeError, ValueError):
+        raise HTTPException(status_code=502, detail="The configured model could not generate a reply.") from None
+
+    assistant_message = ChatMessage(
+        session_id=payload.session_id,
+        role="assistant",
+        content=answer,
+        message_metadata={"provider": settings.llm_provider, "model": settings.ollama_model},
+    )
+    db.add(assistant_message)
+    session.updated_at = models.utc_now()
+    db.commit()
+    db.refresh(assistant_message)
+
+    return {
+        "session_id": payload.session_id,
+        "user_message_id": user_message.id,
+        "assistant_message_id": assistant_message.id,
+        "answer": answer,
+        "provider": settings.llm_provider,
+        "model": settings.ollama_model,
+    }
