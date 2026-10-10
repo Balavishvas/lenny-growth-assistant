@@ -13,7 +13,7 @@
     artifactView: $("#artifactView"), artifactText: $("#artifactText"), artifactName: $("#artifactName"),
     artifactWordCount: $("#artifactWordCount"), previewCanvas: $("#previewCanvas"), previewLabel: $("#previewLabel"),
     createArtifact: $("#createArtifact"), downloadArtifact: $("#downloadArtifact"), copyArtifact: $("#copyArtifact"),
-    settingsButton: $("#settingsButton")
+    settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle")
   };
   const state = {
     sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "",
@@ -21,6 +21,7 @@
     artifactContent: "", busy: false, toastTimer: null, abortController: null
   };
   const STORE_KEY = "lenny-growth-assistant.workspace.v1";
+  const THEME_KEY = "lenny-growth-assistant.theme.v1";
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -296,6 +297,25 @@
     anchor.href = url; anchor.download = (state.artifactTitle || "growth-brief").replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() + "." + ext;
     document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
   }
+  function applyTheme(theme, save = true) {
+    const selected = theme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = selected;
+    if (els.themeToggle) {
+      const dark = selected === "dark";
+      els.themeToggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+      els.themeToggle.title = dark ? "Switch to light theme" : "Switch to dark theme";
+      els.themeToggle.querySelector(".theme-glyph").textContent = dark ? "☼" : "◐";
+      els.themeToggle.querySelector(".theme-label").textContent = dark ? "Light mode" : "Dark mode";
+    }
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.content = selected === "dark" ? "#10131b" : "#f6f4ee";
+    if (save) {
+      try { localStorage.setItem(THEME_KEY, selected); } catch { /* Theme still applies for this page. */ }
+    }
+  }
+  function toggleTheme() {
+    applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+  }
   function showSettings() {
     showToast("Model: Qwen 2.5 7B · Provider: local Ollama · Sources: PostgreSQL + pgvector");
   }
@@ -347,6 +367,7 @@
   els.openSidebar.addEventListener("click", () => els.sidebar.classList.add("open"));
   els.closeSidebar.addEventListener("click", () => els.sidebar.classList.remove("open"));
   els.settingsButton.addEventListener("click", showSettings);
+  els.themeToggle.addEventListener("click", toggleTheme);
   els.createArtifact.addEventListener("click", () => {
     const latest = [...state.messages].reverse().find((message) => message.role === "assistant");
     if (!latest) { showToast("Ask a question first, then turn the answer into a draft."); return; }
@@ -368,6 +389,9 @@
 
   async function init() {
     loadPersisted();
+    let savedTheme = "light";
+    try { savedTheme = localStorage.getItem(THEME_KEY) || "light"; } catch { /* Use light theme by default. */ }
+    applyTheme(savedTheme, false);
     els.artifactText.value = state.artifactContent;
     renderArtifact(); renderSessions(); renderSources([], false);
     if (state.sessionId) {
