@@ -64,6 +64,7 @@ def main() -> int:
             timeout=240,
             check=False,
             shell=(os.name == "nt"),
+            stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
         print("FAIL: Pi smoke test timed out after 240 seconds.", file=sys.stderr)

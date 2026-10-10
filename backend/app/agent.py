@@ -1,14 +1,37 @@
 """Pi Coding Agent adapter with a local Ollama fallback."""
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+import json
 import logging
+import os
 from pathlib import Path
+from typing import Any
 
 from app.config import get_settings
 from app.llm import generate_reply, stream_reply
 
 logger = logging.getLogger("lenny.agent")
+
+_tool_invocations: list[dict[str, Any]] = []
+
+
+def get_tool_invocations() -> list[dict[str, Any]]:
+    """Return recorded tool invocations (for verification and tests)."""
+    return list(_tool_invocations)
+
+
+def reset_tool_invocations() -> None:
+    """Reset recorded tool invocations."""
+    _tool_invocations.clear()
+
+
+def _record_tool_invocation(tool_name: str, args: dict, result_count: int = 0) -> None:
+    _tool_invocations.append({
+        "tool_name": tool_name,
+        "args": args,
+        "result_count": result_count,
+    })
 
 
 def _to_prompt(messages: list[dict[str, str]]) -> str:
@@ -21,10 +44,10 @@ def _to_prompt(messages: list[dict[str, str]]) -> str:
 
 
 def _pi_extra_args() -> list[str]:
-    """Load only the app-specific retrieval tool, keeping Pi built-in tools disabled."""
+    """Load the custom retrieval tool while keeping Pi built-in CLI tools disabled."""
     extension = Path(__file__).resolve().parent / "pi_extensions" / "lenny_rag.ts"
     return [
-        "--no-tools",
+        "--no-builtin-tools",
         "--no-skills",
         "--no-context-files",
         "--extension",
@@ -32,7 +55,26 @@ def _pi_extra_args() -> list[str]:
     ]
 
 
-def generate_agent_reply(messages: list[dict[str, str]]) -> str:
+def _pi_env(existing_sources: list[dict] | None = None) -> dict[str, str]:
+    """Ensure the custom extension knows the API URL and existing source citation indices."""
+    env = dict(os.environ)
+    if "LENNY_API_BASE_URL" not in env:
+        env["LENNY_API_BASE_URL"] = "http://127.0.0.1:8000"
+    if existing_sources:
+        mapping = {str(s["chunk_id"]): i + 1 for i, s in enumerate(existing_sources) if "chunk_id" in s}
+        env["LENNY_EXISTING_SOURCES"] = json.dumps(mapping)
+        env["LENNY_SOURCE_OFFSET"] = str(len(existing_sources))
+    else:
+        env["LENNY_EXISTING_SOURCES"] = "{}"
+        env["LENNY_SOURCE_OFFSET"] = "0"
+    return env
+
+
+def generate_agent_reply(
+    messages: list[dict[str, str]],
+    on_tool_call: Callable[[str, dict, list[dict]], None] | None = None,
+    initial_sources: list[dict] | None = None,
+) -> str:
     """Use Pi Coding Agent when selected; retain native Ollama as a fallback."""
     settings = get_settings()
     runtime = settings.agent_runtime.lower().strip()
@@ -58,21 +100,60 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
             model=settings.ollama_model,
             no_session=True,
             extra_args=_pi_extra_args(),
+            env=_pi_env(initial_sources),
         ) as pi:
-            result = pi.run(_to_prompt(messages))
+            answer_parts = []
+            active_tool_calls: dict[str, dict] = {}
+            with pi.stream(_to_prompt(messages)) as stream:
+                for event in stream:
+                    ev_type = getattr(event, "type", None)
+                    raw = getattr(event, "raw", None) or {}
+                    if ev_type == "tool_execution_start":
+                        t_name = raw.get("toolName", "unknown")
+                        t_call_id = raw.get("toolCallId") or "default"
+                        t_args = raw.get("args") or {}
+                        active_tool_calls[t_call_id] = t_args
+                        logger.info("custom_tool_execution_started tool=%s query=%s", t_name, t_args.get("query"))
+                    elif ev_type == "tool_execution_end":
+                        t_name = raw.get("toolName", "unknown")
+                        t_call_id = raw.get("toolCallId") or "default"
+                        t_args = active_tool_calls.pop(t_call_id, None) or raw.get("args") or {}
+                        t_res = raw.get("result") or {}
+                        t_details = t_res.get("details") or {}
+                        retrieved = t_details.get("sources") or []
+                        is_err = raw.get("isError", False)
+                        _record_tool_invocation(t_name, t_args, len(retrieved))
+                        logger.info(
+                            "custom_tool_execution_completed tool=%s query=%s results=%d is_error=%s duration_ms=%s",
+                            t_name,
+                            t_args.get("query"),
+                            len(retrieved),
+                            is_err,
+                            raw.get("durationMs"),
+                        )
+                        if on_tool_call:
+                            on_tool_call(t_name, t_args, retrieved)
+                    delta = getattr(event, "text_delta", None)
+                    if isinstance(delta, str) and delta:
+                        answer_parts.append(delta)
+                result = stream.result()
+            answer = "".join(answer_parts).strip() or getattr(result, "text", "").strip()
     except Exception:
         logger.exception("pi_agent_failed")
         raise RuntimeError(
             "Pi agent failed. Verify Node.js, the Pi CLI, and its configured local model."
         ) from None
-    answer = getattr(result, "text", "")
     if not isinstance(answer, str) or not answer.strip():
         raise ValueError("Pi agent returned an empty response")
     logger.info("pi_agent_completed response_chars=%d", len(answer.strip()))
     return answer.strip()
 
 
-def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
+def stream_agent_reply(
+    messages: list[dict[str, str]],
+    on_tool_call: Callable[[str, dict, list[dict]], None] | None = None,
+    initial_sources: list[dict] | None = None,
+) -> Iterator[str]:
     """Stream output from the selected runtime while preserving the SSE token contract."""
     settings = get_settings()
     runtime = settings.agent_runtime.lower().strip()
@@ -99,9 +180,38 @@ def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
             model=settings.ollama_model,
             no_session=True,
             extra_args=_pi_extra_args(),
+            env=_pi_env(initial_sources),
         ) as pi:
+            active_tool_calls: dict[str, dict] = {}
             with pi.stream(_to_prompt(messages)) as stream:
                 for event in stream:
+                    ev_type = getattr(event, "type", None)
+                    raw = getattr(event, "raw", None) or {}
+                    if ev_type == "tool_execution_start":
+                        t_name = raw.get("toolName", "unknown")
+                        t_call_id = raw.get("toolCallId") or "default"
+                        t_args = raw.get("args") or {}
+                        active_tool_calls[t_call_id] = t_args
+                        logger.info("custom_tool_execution_started tool=%s query=%s", t_name, t_args.get("query"))
+                    elif ev_type == "tool_execution_end":
+                        t_name = raw.get("toolName", "unknown")
+                        t_call_id = raw.get("toolCallId") or "default"
+                        t_args = active_tool_calls.pop(t_call_id, None) or raw.get("args") or {}
+                        t_res = raw.get("result") or {}
+                        t_details = t_res.get("details") or {}
+                        retrieved = t_details.get("sources") or []
+                        is_err = raw.get("isError", False)
+                        _record_tool_invocation(t_name, t_args, len(retrieved))
+                        logger.info(
+                            "custom_tool_execution_completed tool=%s query=%s results=%d is_error=%s duration_ms=%s",
+                            t_name,
+                            t_args.get("query"),
+                            len(retrieved),
+                            is_err,
+                            raw.get("durationMs"),
+                        )
+                        if on_tool_call:
+                            on_tool_call(t_name, t_args, retrieved)
                     delta = getattr(event, "text_delta", None)
                     if isinstance(delta, str) and delta:
                         yield delta
