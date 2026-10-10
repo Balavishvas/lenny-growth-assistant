@@ -1,9 +1,4 @@
-"""Agent-runtime adapter for Lenny Growth Assistant.
-
-The Pi runtime is optional so the local Ollama demo remains usable without
-Node/Pi installed. Set AGENT_RUNTIME=pi to route responses through Pi's runtime;
-retrieval and database writes remain deterministic application code.
-"""
+"""Pi Coding Agent adapter with a local Ollama fallback."""
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -14,22 +9,16 @@ from app.llm import generate_reply, stream_reply
 
 
 def _to_prompt(messages: list[dict[str, str]]) -> str:
-    """Convert grounded chat messages into a single agent task."""
-    sections: list[str] = []
+    """Pass the grounded system prompt and bounded chat history to Pi."""
+    sections = []
     for message in messages:
         role = message.get("role", "user").upper()
-        content = message.get("content", "")
-        sections.append(f"## {role}\n{content}")
-    return (
-        "You are Lenny Growth Assistant. Follow the system instructions and use only "
-        "the supplied retrieved evidence for claims about Lenny's content. Preserve "
-        "citation markers included in the evidence prompt. Do not invent sources.\n\n"
-        + "\n\n".join(sections)
-    )
+        sections.append(f"## {role}\n{message.get('content', '')}")
+    return "\n\n".join(sections)
 
 
 def generate_agent_reply(messages: list[dict[str, str]]) -> str:
-    """Run Pi when selected, otherwise preserve the local Ollama adapter."""
+    """Use Pi Coding Agent when selected; retain native Ollama as a fallback."""
     settings = get_settings()
     runtime = settings.agent_runtime.lower().strip()
     if runtime in {"ollama", "native"}:
@@ -41,8 +30,8 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
         from pi_agent import PiClient
     except ImportError as exc:
         raise RuntimeError(
-            "Pi runtime selected but pi-agent-python-sdk is missing. Install requirements "
-            "and configure Pi, or set AGENT_RUNTIME=ollama."
+            "Pi runtime selected but pi-agent-python-sdk is not installed. "
+            "Install requirements and configure the Pi CLI, or set AGENT_RUNTIME=ollama."
         ) from exc
 
     try:
@@ -50,7 +39,7 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
             result = pi.run(_to_prompt(messages))
     except Exception as exc:
         raise RuntimeError(
-            "Pi agent failed. Verify the Pi CLI installation and configured model provider."
+            "Pi agent failed. Verify Node.js, the Pi CLI, and its configured local model."
         ) from exc
     answer = getattr(result, "text", "")
     if not isinstance(answer, str) or not answer.strip():
@@ -59,11 +48,31 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
 
 
 def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
-    """Stream Ollama responses; chunk Pi's final response to preserve the SSE contract."""
+    """Stream output from the selected runtime while preserving the SSE token contract."""
     settings = get_settings()
     if settings.agent_runtime.lower().strip() in {"ollama", "native"}:
         yield from stream_reply(messages)
         return
-    answer = generate_agent_reply(messages)
-    for offset in range(0, len(answer), 48):
-        yield answer[offset : offset + 48]
+
+    try:
+        from pi_agent import PiClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "Pi runtime selected but pi-agent-python-sdk is not installed. "
+            "Install requirements and configure the Pi CLI, or set AGENT_RUNTIME=ollama."
+        ) from exc
+
+    try:
+        with PiClient(cwd=str(Path.cwd()), no_session=True) as pi:
+            with pi.stream(_to_prompt(messages)) as stream:
+                for event in stream:
+                    delta = getattr(event, "text_delta", None)
+                    if isinstance(delta, str) and delta:
+                        yield delta
+                result = stream.result()
+    except Exception as exc:
+        raise RuntimeError(
+            "Pi agent failed. Verify Node.js, the Pi CLI, and its configured local model."
+        ) from exc
+    if not getattr(result, "text", "").strip():
+        raise ValueError("Pi agent returned an empty response")
