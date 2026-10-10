@@ -17,12 +17,12 @@ A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and n
 
 - **API:** Python + FastAPI
 - **Persistence:** PostgreSQL + pgvector
-- **Local chat model:** Ollama `qwen2.5:7b`
+- **Agent orchestration:** selectable Pi Coding Agent runtime through `pi-agent-python-sdk`, with a native Ollama fallback for local development\n- **Local chat model:** Ollama `qwen2.5:3b` (override via `.env`)
 - **Local embedding model:** Ollama `nomic-embed-text`
 - **Retrieval:** transcript ingestion, chunking, vector similarity search, and source attribution
 - **Frontend:** static HTML/CSS/JavaScript served by FastAPI at `/`; no Node.js build step required
 - **Artifacts:** browser-local editable Markdown/HTML drafts with sandboxed HTML preview and export
-- **Agent / Ship 30 writing skill / server-side artifact persistence:** subsequent milestones
+- **Agent:** `AGENT_RUNTIME=pi` routes grounded chat through Pi Coding Agent; `AGENT_RUNTIME=ollama` retains the native Ollama adapter. Pi requires Node.js and a configured Pi CLI model provider.\n- **Ship 30 writing skill / server-side artifact persistence:** remaining milestones
 
 ## Quick start
 
@@ -43,7 +43,7 @@ Index your local transcript corpus:
 python -m app.ingest_cli
 ```
 
-The external transcript corpus is intentionally excluded from Git. Download it locally and ensure you comply with the source repository's terms. Never commit your `.env` file or real credentials.
+To use Pi Coding Agent, install Node.js 22.19+ and Pi CLI 0.85.1+ (`npm install -g @earendil-works/pi-coding-agent@0.87.1`), configure a local Ollama-compatible model in Pi, install requirements, then set `AGENT_RUNTIME=pi` in `.env`. Start with `AGENT_RUNTIME=ollama` until the Pi CLI is configured and verified.\n\nThe external transcript corpus is intentionally excluded from Git. Download it locally and ensure you comply with the source repository's terms. Never commit your `.env` file or real credentials.
 
 ## Test RAG chat
 
