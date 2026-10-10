@@ -99,3 +99,23 @@ def test_list_sessions_returns_recent_conversations():
 
     assert response.status_code == 200
     assert any(item["id"] == session_id for item in response.json())
+
+
+def test_stream_chat_returns_tokens_and_latency_metadata(monkeypatch):
+    session_id = _new_session()
+    monkeypatch.setattr(main, "retrieve_chunks", lambda query, db, top_k: [FAKE_SOURCE])
+    monkeypatch.setattr(main, "stream_reply", lambda messages: iter(["A grounded ", "answer [1]."]))
+
+    response = client.post(
+        "/api/v1/chat/stream",
+        json={"session_id": session_id, "message": "What makes a strong product?"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"type": "token"' in response.text
+    assert "A grounded " in response.text
+    assert '"type": "done"' in response.text
+    assert '"retrieval_ms"' in response.text
+    history = client.get(f"/api/v1/sessions/{session_id}").json()
+    assert history["messages"][-1]["content"] == "A grounded answer [1]."
