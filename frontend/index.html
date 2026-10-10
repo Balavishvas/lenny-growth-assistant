@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10110f">
+  <meta name="description" content="Evidence-grounded product and growth research, powered by Lenny's podcast library.">
+  <title>Lenny — Growth Research Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark"><span></span><span></span><span></span></div>
+        <div class="brand-copy"><strong>lenny<span>.</span></strong><small>GROWTH INTELLIGENCE</small></div>
+        <button class="icon-button mobile-close" id="closeSidebar" aria-label="Close sidebar">×</button>
+      </div>
+      <button class="new-chat-button" id="newChat"><span class="plus">＋</span> New conversation <kbd>⌘ K</kbd></button>
+      <div class="side-section-label"><span>WORKSPACE</span><span class="tiny-dot"></span></div>
+      <nav class="workspace-nav">
+        <button class="nav-item active" data-view="chat"><span class="nav-icon">◉</span> Research chat <span class="nav-count">01</span></button>
+        <button class="nav-item" data-view="artifacts"><span class="nav-icon">▤</span> Artifacts <span class="nav-tag">BETA</span></button>
+      </nav>
+      <div class="history-header"><span>RECENT CONVERSATIONS</span><button id="refreshSessions" class="icon-button" title="Refresh conversations">↻</button></div>
+      <div class="conversation-list" id="conversationList"><div class="empty-history">Your conversations will appear here.</div></div>
+      <div class="sidebar-bottom">
+        <div class="model-card"><div class="model-icon">✳</div><div><strong>Local intelligence</strong><span><i class="status-dot"></i> Ollama · Qwen 2.5 7B</span></div><span class="local-badge">LOCAL</span></div>
+        <div class="profile-row"><div class="avatar">LG</div><div class="profile-copy"><strong>Growth workspace</strong><span>Private research session</span></div><button class="icon-button" title="Workspace settings" id="settingsButton">···</button></div>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div class="topbar-left"><button class="icon-button menu-toggle" id="openSidebar" aria-label="Open sidebar">☰</button><div class="breadcrumb"><span>Workspace</span><span class="crumb-slash">/</span><strong id="pageBreadcrumb">Research chat</strong></div></div>
+        <div class="topbar-right"><div class="privacy-chip"><span>⌁</span> Your local workspace</div><button class="icon-button" id="toggleSources" title="Toggle evidence panel">◫</button></div>
+      </header>
+
+      <div class="workspace-grid" id="workspaceGrid">
+        <section class="chat-column" id="chatColumn">
+          <div class="welcome-view" id="welcomeView">
+            <div class="eyebrow"><span class="eyebrow-line"></span> THE GROWTH PLAYBOOK <span class="eyebrow-line"></span></div>
+            <div class="welcome-orb"><div class="orb-ring ring-one"></div><div class="orb-ring ring-two"></div><div class="orb-core">L<span>.</span></div><div class="orb-spark spark-a">✳</div><div class="orb-spark spark-b">✦</div></div>
+            <h1>Good questions<br>create <em>great products.</em></h1>
+            <p class="welcome-description">Explore the ideas behind great products. Ask a question and get evidence-backed insights from Lenny’s podcast library.</p>
+            <div class="starter-grid">
+              <button class="starter-card" data-prompt="How do the best product teams find product-market fit?"><span class="starter-icon coral">↗</span><span><strong>Find product-market fit</strong><small>Signals, frameworks, and first principles</small></span><span class="starter-arrow">↗</span></button>
+              <button class="starter-card" data-prompt="What are effective strategies for improving user activation and onboarding?"><span class="starter-icon blue">⌁</span><span><strong>Improve activation</strong><small>Turn first-time users into regulars</small></span><span class="starter-arrow">↗</span></button>
+              <button class="starter-card" data-prompt="How should a startup choose its north star metric?"><span class="starter-icon yellow">◎</span><span><strong>Choose a north star metric</strong><small>Measure what really matters</small></span><span class="starter-arrow">↗</span></button>
+              <button class="starter-card" data-prompt="What hiring principles help early-stage startups build strong teams?"><span class="starter-icon green">⌘</span><span><strong>Build a great team</strong><small>Hiring, leadership, and culture</small></span><span class="starter-arrow">↗</span></button>
+            </div>
+          </div>
+          <div class="messages-list" id="messagesList" aria-live="polite"></div>
+          <div class="composer-wrap">
+            <div class="composer-box">
+              <textarea id="messageInput" rows="1" placeholder="Ask about product, growth, or building a startup…" aria-label="Your question"></textarea>
+              <div class="composer-toolbar"><div class="composer-hints"><span class="kbd-hint">↵</span> to send <span class="hint-divider">·</span><span>Answers grounded in source material</span></div><button id="sendButton" class="send-button" aria-label="Send message"><span>Send</span><span class="send-arrow">↑</span></button></div>
+            </div>
+            <div class="composer-footnote"><span class="shield-icon">◇</span> Answers are grounded in retrieved sources. Always verify important decisions.</div>
+          </div>
+        </section>
+
+        <aside class="evidence-panel" id="evidencePanel">
+          <div class="panel-heading"><div><div class="panel-kicker">RESEARCH CONTEXT</div><h2>Evidence <span id="sourceCount" class="count-pill">0</span></h2></div><button class="icon-button" id="closeEvidence" title="Close evidence panel">×</button></div>
+          <div class="grounding-status" id="groundingStatus"><span class="status-symbol">⌁</span><div><strong>Ready to research</strong><span>Sources appear with your answer.</span></div></div>
+          <div class="evidence-content" id="evidenceContent"><div class="evidence-empty"><div class="empty-icon">⌕</div><strong>Your sources, in context.</strong><p>Ask a question to see the transcript passages used to support the answer.</p></div></div>
+          <div class="evidence-footer"><span class="footer-spark">✳</span><span>Traceable by design</span><span class="footer-divider">·</span><span>Source-first answers</span></div>
+        </aside>
+      </div>
+
+      <section class="artifact-view" id="artifactView" hidden>
+        <div class="artifact-topline"><div><div class="panel-kicker">WORKSPACE / ARTIFACTS</div><h1>Turn insight into <em>something real.</em></h1><p>Shape an answer into a shareable draft. Preview HTML in an isolated sandbox.</p></div><div class="artifact-actions"><button class="secondary-button" id="downloadArtifact">↓ Export</button><button class="primary-button" id="createArtifact">＋ Create from latest answer</button></div></div>
+        <div class="artifact-workspace">
+          <section class="artifact-editor"><div class="artifact-section-head"><div><span class="file-glyph">▤</span><strong>Draft editor</strong><span class="unsaved-dot"></span></div><div class="tab-switch" role="tablist"><button class="active" data-artifact-tab="markdown">Markdown</button><button data-artifact-tab="html">HTML</button></div></div><div class="artifact-meta"><span id="artifactName">Untitled growth brief</span><span id="artifactWordCount">0 words</span></div><textarea class="artifact-textarea" id="artifactText" spellcheck="true" aria-label="Artifact content" placeholder="# Your growth brief&#10;&#10;Create an artifact from an assistant answer or start writing here."></textarea><div class="editor-foot"><span><span class="green-dot"></span> Draft saved in this browser</span><button class="text-button" id="copyArtifact">Copy content ↗</button></div></section>
+          <section class="artifact-preview"><div class="artifact-section-head"><div><span class="preview-glyph">◩</span><strong>Live preview</strong></div><span class="preview-label" id="previewLabel">MARKDOWN PREVIEW</span></div><div class="preview-canvas" id="previewCanvas"><div class="preview-placeholder"><div class="empty-icon">✧</div><strong>Your next great idea starts here.</strong><p>Create an artifact from a useful answer to see the preview.</p></div></div><div class="preview-foot"><span class="shield-icon">◇</span> HTML runs in a sandboxed preview</div></section>
+        </div>
+      </section>
+      <div class="toast" id="toast" role="status"></div>
+    </main>
+  </div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
