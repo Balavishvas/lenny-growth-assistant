@@ -35,7 +35,13 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
         ) from exc
 
     try:
-        with PiClient(cwd=str(Path.cwd()), no_session=True, extra_args=["--no-tools", "--no-extensions", "--no-skills", "--no-context-files"]) as pi:
+        with PiClient(
+            cwd=str(Path.cwd()),
+            provider="ollama",
+            model=settings.ollama_model,
+            no_session=True,
+            extra_args=["--no-tools", "--no-extensions", "--no-skills", "--no-context-files"],
+        ) as pi:
             result = pi.run(_to_prompt(messages))
     except Exception as exc:
         raise RuntimeError(
@@ -63,7 +69,13 @@ def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
         ) from exc
 
     try:
-        with PiClient(cwd=str(Path.cwd()), no_session=True, extra_args=["--no-tools", "--no-extensions", "--no-skills", "--no-context-files"]) as pi:
+        with PiClient(
+            cwd=str(Path.cwd()),
+            provider="ollama",
+            model=settings.ollama_model,
+            no_session=True,
+            extra_args=["--no-tools", "--no-extensions", "--no-skills", "--no-context-files"],
+        ) as pi:
             with pi.stream(_to_prompt(messages)) as stream:
                 for event in stream:
                     delta = getattr(event, "text_delta", None)
