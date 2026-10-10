@@ -76,7 +76,7 @@
         if (!inQuote) { output.push("<blockquote>"); inQuote = true; }
         output.push(line.replace(/^&gt;\s?/, "") + "<br>"); continue;
       }
-      if (!line.trim()) { flushParagraph(); closeList(); closeQuote(); continue; }
+      if (!line.trim()) {\n        flushParagraph();\n        const nextLine = lines.slice(lines.indexOf(line) + 1).find((item) => item.trim());\n        if (listType === "ol" && nextLine && /^\\s*\\d+[.)]\\s+/.test(nextLine)) continue;\n        if (listType === "ul" && nextLine && /^\\s*[-*+]\\s+/.test(nextLine)) continue;\n        closeList(); closeQuote(); continue;\n      }
       closeList(); closeQuote(); paragraph.push(line);
     }
     flushParagraph(); closeList(); closeQuote();
