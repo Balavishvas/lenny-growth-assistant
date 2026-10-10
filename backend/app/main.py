@@ -2,9 +2,12 @@
 
 from contextlib import asynccontextmanager
 from collections.abc import Generator
+from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -51,6 +54,15 @@ app = FastAPI(
     description="Evidence-grounded assistant for product and growth research.",
     lifespan=lifespan,
 )
+
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def frontend() -> FileResponse:
+    """Serve the research workspace UI."""
+    return FileResponse(FRONTEND_DIR / "index.html")
 
 
 def get_db() -> Generator[Session, None, None]:
