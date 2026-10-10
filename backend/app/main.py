@@ -19,7 +19,7 @@ from app import models  # noqa: F401 - registers chat tables with Base.metadata
 from app.config import get_settings
 from app.database import Base, SessionLocal, check_database_connection, engine
 from app.knowledge_models import DocumentChunk  # noqa: F401 - registers vector table
-from app.llm import generate_reply, stream_reply
+from app.agent import generate_agent_reply, stream_agent_reply
 from app.models import ChatMessage, ChatSession
 from app.retrieval import retrieve_chunks
 from app.schemas import (
@@ -286,7 +286,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
         answer_parts = []
         generation_started = time.perf_counter()
         try:
-            for token in stream_reply(messages):
+            for token in stream_agent_reply(messages):
                 answer_parts.append(token)
                 yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
             answer = "".join(answer_parts).strip()
@@ -381,7 +381,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
         )
         try:
             generation_started = time.perf_counter()
-            answer = generate_reply([{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}])
+            answer = generate_agent_reply([{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}])
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="The local model timed out. Try again.") from None
