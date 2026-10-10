@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import httpx
 
 from app.config import get_settings
+
+
+@lru_cache(maxsize=4)
+def _get_http_client(base_url: str, timeout_seconds: float) -> httpx.Client:
+    """Reuse HTTP connections for repeated local embedding requests."""
+    return httpx.Client(timeout=timeout_seconds)
 
 
 def embed_texts(texts: list[str], input_type: str = "document") -> list[list[float]]:
@@ -29,12 +37,16 @@ def embed_texts(texts: list[str], input_type: str = "document") -> list[list[flo
     embeddings: list[list[float]] = []
 
     batch_size = max(1, settings.embedding_batch_size)
-    with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
-        for offset in range(0, len(inputs), batch_size):
+    client = _get_http_client(settings.ollama_base_url, settings.llm_timeout_seconds)
+    for offset in range(0, len(inputs), batch_size):
             batch = inputs[offset : offset + batch_size]
             response = client.post(
                 url,
-                json={"model": settings.embedding_model, "input": batch},
+                json={
+                    "model": settings.embedding_model,
+                    "input": batch,
+                    "keep_alive": settings.ollama_keep_alive,
+                },
             )
             response.raise_for_status()
             payload = response.json()
