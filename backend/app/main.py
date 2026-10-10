@@ -108,6 +108,12 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)) -> Cha
     return session
 
 
+@app.get("/api/v1/sessions", response_model=list[SessionRead], tags=["sessions"])
+def list_sessions(db: Session = Depends(get_db)) -> list[ChatSession]:
+    """List the most recently updated conversation sessions."""
+    return db.query(ChatSession).order_by(ChatSession.updated_at.desc()).limit(40).all()
+
+
 @app.get(
     "/api/v1/sessions/{session_id}",
     response_model=SessionDetail,
