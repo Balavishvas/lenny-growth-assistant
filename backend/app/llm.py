@@ -17,7 +17,7 @@ def generate_reply(messages: list[dict[str, str]]) -> str:
         json={
             "model": settings.ollama_model,
             "messages": messages,
-            "stream": False,
+            "stream": False,\n            "keep_alive": settings.ollama_keep_alive,\n            "options": {"num_predict": settings.llm_num_predict},
         },
         timeout=settings.llm_timeout_seconds,
     )
