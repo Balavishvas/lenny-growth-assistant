@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+import logging
 from pathlib import Path
 
 from app.config import get_settings
 from app.llm import generate_reply, stream_reply
+
+logger = logging.getLogger("lenny.agent")
 
 
 def _to_prompt(messages: list[dict[str, str]]) -> str:
@@ -33,6 +36,7 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
     """Use Pi Coding Agent when selected; retain native Ollama as a fallback."""
     settings = get_settings()
     runtime = settings.agent_runtime.lower().strip()
+    logger.info("agent_runtime_selected runtime=%s model=%s", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
         return generate_reply(messages)
     if runtime != "pi":
@@ -47,6 +51,7 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
         ) from exc
 
     try:
+        logger.info("pi_agent_starting extension=%s", Path(__file__).resolve().parent / "pi_extensions" / "lenny_rag.ts")
         with PiClient(
             cwd=str(Path.cwd()),
             provider="ollama",
@@ -55,22 +60,28 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
             extra_args=_pi_extra_args(),
         ) as pi:
             result = pi.run(_to_prompt(messages))
-    except Exception as exc:
+    except Exception:
+        logger.exception("pi_agent_failed")
         raise RuntimeError(
             "Pi agent failed. Verify Node.js, the Pi CLI, and its configured local model."
-        ) from exc
+        ) from None
     answer = getattr(result, "text", "")
     if not isinstance(answer, str) or not answer.strip():
         raise ValueError("Pi agent returned an empty response")
+    logger.info("pi_agent_completed response_chars=%d", len(answer.strip()))
     return answer.strip()
 
 
 def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
     """Stream output from the selected runtime while preserving the SSE token contract."""
     settings = get_settings()
-    if settings.agent_runtime.lower().strip() in {"ollama", "native"}:
+    runtime = settings.agent_runtime.lower().strip()
+    logger.info("agent_runtime_selected runtime=%s model=%s streaming=true", runtime, settings.ollama_model)
+    if runtime in {"ollama", "native"}:
         yield from stream_reply(messages)
         return
+    if runtime != "pi":
+        raise RuntimeError(f"Unsupported agent runtime: {runtime}")
 
     try:
         from pi_agent import PiClient
@@ -81,6 +92,7 @@ def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
         ) from exc
 
     try:
+        logger.info("pi_agent_starting extension=%s", Path(__file__).resolve().parent / "pi_extensions" / "lenny_rag.ts")
         with PiClient(
             cwd=str(Path.cwd()),
             provider="ollama",
@@ -94,9 +106,11 @@ def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
                     if isinstance(delta, str) and delta:
                         yield delta
                 result = stream.result()
-    except Exception as exc:
+    except Exception:
+        logger.exception("pi_agent_failed")
         raise RuntimeError(
             "Pi agent failed. Verify Node.js, the Pi CLI, and its configured local model."
-        ) from exc
+        ) from None
     if not getattr(result, "text", "").strip():
         raise ValueError("Pi agent returned an empty response")
+    logger.info("pi_agent_completed response_chars=%d streaming=true", len(result.text.strip()))
