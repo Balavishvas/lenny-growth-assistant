@@ -78,6 +78,12 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+@app.get("/api/v1/config", tags=["operations"])
+def public_config() -> dict[str, str]:
+    """Expose non-secret runtime model settings to the workspace UI."""
+    return {"provider": settings.llm_provider, "model": settings.ollama_model}
+
+
 @app.get("/health", tags=["operations"])
 def health() -> dict[str, str]:
     """Report API process liveness; this does not imply DB/model readiness."""
