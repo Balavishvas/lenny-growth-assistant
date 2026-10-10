@@ -260,8 +260,8 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             db.add(ChatMessage(session_id=payload.session_id, role="assistant", content=answer, message_metadata={"sources": [], "grounded": False}))
             session.updated_at = models.utc_now()
             db.commit()
-            yield "data: " + json.dumps({"type": "token", "text": answer}) + "\\n\\n"
-            yield "data: " + json.dumps({"type": "done", "sources": [], "grounded": False, "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": 0, "total_ms": round((time.perf_counter() - started) * 1000, 2)}) + "\\n\\n"
+            yield "data: " + json.dumps({"type": "token", "text": answer}) + "\n\n"
+            yield "data: " + json.dumps({"type": "done", "sources": [], "grounded": False, "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": 0, "total_ms": round((time.perf_counter() - started) * 1000, 2)}) + "\n\n"
         return StreamingResponse(no_evidence_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     system_prompt = (
@@ -271,7 +271,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
         "quotes, facts, guests, or URLs. Cite every material claim with bracket citations matching passage "
         "numbers, such as [1] or [2]. If evidence is incomplete or conflicting, say so clearly. If the "
         "passages do not support an answer, say you do not have enough evidence rather than guessing. "
-        "Do not cite a source that does not support the claim.\\n\\nRetrieved evidence:\\n"
+        "Do not cite a source that does not support the claim.\n\nRetrieved evidence:\n"
         + _format_evidence(sources)
     )
     messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
@@ -282,7 +282,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
         try:
             for token in stream_reply(messages):
                 answer_parts.append(token)
-                yield "data: " + json.dumps({"type": "token", "text": token}) + "\\n\\n"
+                yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
             answer = "".join(answer_parts).strip()
             if not answer:
                 raise ValueError("Ollama returned an empty response")
@@ -299,11 +299,11 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             total_ms = round((time.perf_counter() - started) * 1000, 2)
             logger.info("chat_stream_latency session_id=%s retrieval_ms=%.2f generation_ms=%.2f total_ms=%.2f sources=%d", payload.session_id, retrieval_ms, generation_ms, total_ms, len(sources))
-            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": True, "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms}) + "\\n\\n"
+            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": True, "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms}) + "\n\n"
         except Exception:
             db.rollback()
             logger.exception("chat_stream_failed session_id=%s", payload.session_id)
-            yield "data: " + json.dumps({"type": "error", "message": "Generation failed. Check the Ollama service and server logs."}) + "\\n\\n"
+            yield "data: " + json.dumps({"type": "error", "message": "Generation failed. Check the Ollama service and server logs."}) + "\n\n"
         finally:
             db.close()
 
