@@ -50,5 +50,5 @@
 .brand-mark{transform:none}
 .brand-mark span{width:auto;height:auto!important;background:transparent!important;font:19px var(--display);color:var(--accent);line-height:1}
 .welcome-view{overflow:visible}
-@media(min-width:761px){.workspace-grid{min-height:0}.chat-column{overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}.welcome-view{flex:none}.messages-list{flex:none;overflow:visible}.composer-wrap{position:sticky;bottom:0;margin-top:auto;flex:none;padding-top:20px;background:linear-gradient(0deg,var(--paper-2) 82%,rgba(255,254,250,0))}.evidence-content{scrollbar-gutter:stable}.workspace-grid{overflow:hidden}}
+@media(min-width:761px){.workspace-grid{min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}.chat-column{overflow:visible;min-height:100%}.welcome-view{flex:none}.messages-list{flex:none;overflow:visible}.composer-wrap{position:sticky;bottom:0;margin-top:auto;flex:none;padding-top:20px;background:linear-gradient(0deg,var(--paper-2) 82%,rgba(255,254,250,0))}.evidence-content{scrollbar-gutter:stable}.workspace-grid.evidence-hidden{overflow-y:auto}}
 @media(max-width:760px){.theme-toggle{font-size:0;padding:0 8px}.theme-label{display:none}.theme-glyph{font-size:16px}.welcome-view{overflow:visible}}
