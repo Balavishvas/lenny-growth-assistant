@@ -9,7 +9,8 @@ A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and n
 - Local Ollama embedding adapter using Nomic Embed Text (768-dimensional vectors by default).
 - Markdown transcript parsing, overlapping chunking, batched embeddings, repeatable ingestion, and source metadata.
 - Vector similarity search exposed through `POST /api/v1/retrieval/search`.
-- Unit tests for transcript frontmatter parsing and chunking.
+- RAG-powered chat that supplies retrieved passages to the local model, returns traceable source chunks, persists source metadata, and uses an honest fallback when retrieval finds no passages.
+- Tests for transcript chunking/parsing, chat grounding, source persistence, and unsupported-question fallback.
 
 ## Architecture
 
@@ -27,7 +28,7 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for complete setup and testing in
 From the repository root in PowerShell:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 $env:PYTHONPATH = "backend"
 uvicorn app.main:app --reload
@@ -41,9 +42,12 @@ python -m app.ingest_cli
 
 The external transcript corpus is intentionally excluded from Git. Download it locally and ensure you comply with the source repository's terms. Never commit your `.env` file or real credentials.
 
+## Test RAG chat
+
+Create a session with `POST /api/v1/sessions`, then send a message to `POST /api/v1/chat` using the returned `session_id`. The response includes an `answer`, a `grounded` flag, and a `sources` array containing the passages supplied to the model. If retrieval returns no passages, the API returns a transparent fallback instead of asking the model to guess.
+
 ## Next milestones
 
-- [ ] Connect retrieval to chat with evidence-grounded answers and citations.
 - [ ] Add retrieval evaluation with a fixed query/expected-source set (Recall@K, MRR, Precision@K).
 - [ ] Implement the dedicated Ship 30 for 30 writing skill.
 - [ ] Add artifact generation and isolated side-by-side viewer.
