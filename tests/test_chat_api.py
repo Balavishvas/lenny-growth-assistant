@@ -90,3 +90,12 @@ def test_chat_endpoint_returns_404_for_unknown_session():
         json={"session_id": "missing-session", "message": "Hello"},
     )
     assert response.status_code == 404
+
+
+def test_list_sessions_returns_recent_conversations():
+    session_id = _new_session()
+
+    response = client.get("/api/v1/sessions")
+
+    assert response.status_code == 200
+    assert any(item["id"] == session_id for item in response.json())
