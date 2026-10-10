@@ -17,6 +17,18 @@ def _to_prompt(messages: list[dict[str, str]]) -> str:
     return "\n\n".join(sections)
 
 
+def _pi_extra_args() -> list[str]:
+    """Load only the app-specific retrieval tool, keeping Pi built-in tools disabled."""
+    extension = Path(__file__).resolve().parent / "pi_extensions" / "lenny_rag.ts"
+    return [
+        "--no-tools",
+        "--no-skills",
+        "--no-context-files",
+        "--extension",
+        str(extension),
+    ]
+
+
 def generate_agent_reply(messages: list[dict[str, str]]) -> str:
     """Use Pi Coding Agent when selected; retain native Ollama as a fallback."""
     settings = get_settings()
@@ -40,7 +52,7 @@ def generate_agent_reply(messages: list[dict[str, str]]) -> str:
             provider="ollama",
             model=settings.ollama_model,
             no_session=True,
-            extra_args=["--no-tools", "--no-extensions", "--no-skills", "--no-context-files"],
+            extra_args=_pi_extra_args(),
         ) as pi:
             result = pi.run(_to_prompt(messages))
     except Exception as exc:
@@ -74,7 +86,7 @@ def stream_agent_reply(messages: list[dict[str, str]]) -> Iterator[str]:
             provider="ollama",
             model=settings.ollama_model,
             no_session=True,
-            extra_args=["--no-tools", "--no-extensions", "--no-skills", "--no-context-files"],
+            extra_args=_pi_extra_args(),
         ) as pi:
             with pi.stream(_to_prompt(messages)) as stream:
                 for event in stream:
