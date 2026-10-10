@@ -254,7 +254,7 @@
       let buffer = "";
       let streamError = null;
       const handleEvent = (rawEvent) => {
-        const data = rawEvent.split("\\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\\n");
+        const data = rawEvent.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
         if (!data) return;
         let event;
         try { event = JSON.parse(data); } catch { return; }
@@ -275,7 +275,7 @@
       while (true) {
         const { value, done } = await reader.read();
         buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-        const events = buffer.split("\\n\\n");
+        const events = buffer.split("\n\n");
         buffer = events.pop() || "";
         for (const rawEvent of events) handleEvent(rawEvent);
         if (done) break;
@@ -302,7 +302,7 @@
     } catch (error) {
       removeTyping();
       if (assistantIndex >= 0) state.messages.splice(assistantIndex, 1);
-      state.messages.push({ role: "assistant", content: `I couldn't complete that request. **${error.message}**\\n\\nCheck that FastAPI, PostgreSQL, and Ollama are running, then try again.`, metadata: { error: true }, created_at: new Date().toISOString() });
+      state.messages.push({ role: "assistant", content: `I couldn't complete that request. **${error.message}**\n\nCheck that FastAPI, PostgreSQL, and Ollama are running, then try again.`, metadata: { error: true }, created_at: new Date().toISOString() });
       renderMessages(); showToast(error.message || "Request failed.");
     } finally { setBusy(false); els.messageInput.focus(); }
   }
