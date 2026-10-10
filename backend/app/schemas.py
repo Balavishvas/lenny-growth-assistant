@@ -54,6 +54,8 @@ class ChatResponse(BaseModel):
     answer: str
     provider: str
     model: str
+    sources: list["RetrievedSource"] = Field(default_factory=list)
+    grounded: bool = False
 
 
 class RetrievalSearchRequest(BaseModel):
