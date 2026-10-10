@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import { Type } from "@sinclair/typebox";
 
 const API_BASE_URL = (process.env.LENNY_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
