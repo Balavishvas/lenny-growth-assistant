@@ -20,6 +20,10 @@ export default function registerLennyTools(pi: ExtensionAPI) {
       top_k: Type.Optional(Type.Integer({ minimum: 1, maximum: 8, description: "Number of passages to return (1–8; defaults to 5)." }))
     }),
     async execute(_toolCallId, params, signal) {
+      // This marker lets the automated smoke test distinguish a real tool call
+      // from an answer that merely looks like retrieved evidence.
+      console.error("[lenny-rag] search_lenny_transcripts invoked");
+      console.error(`[lenny-rag] query=${params.query}`);
       try {
         const response = await fetch(`${API_BASE_URL}/api/v1/retrieval/search`, {
           method: "POST",
@@ -29,6 +33,7 @@ export default function registerLennyTools(pi: ExtensionAPI) {
         });
         if (!response.ok) {
           const detail = await response.text();
+          console.error(`[lenny-rag] retrieval_failed status=${response.status}`);
           return {
             content: [{ type: "text", text: `Transcript search failed (HTTP ${response.status}): ${detail.slice(0, 500)}` }],
             details: {},
@@ -45,6 +50,7 @@ export default function registerLennyTools(pi: ExtensionAPI) {
           content: string;
           distance: number;
         }>;
+        console.error(`[lenny-rag] retrieval_succeeded results=${sources.length}`);
         if (!sources.length) {
           return {
             content: [{ type: "text", text: "No matching transcript passages were found. Do not infer an answer from absent evidence." }],
@@ -69,6 +75,7 @@ export default function registerLennyTools(pi: ExtensionAPI) {
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown retrieval error";
+        console.error(`[lenny-rag] retrieval_error=${message}`);
         return {
           content: [{ type: "text", text: `Could not reach the Lenny retrieval API at ${API_BASE_URL}. Ensure the FastAPI server is running. Details: ${message}` }],
           details: {},
