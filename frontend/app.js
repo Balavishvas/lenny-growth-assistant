@@ -59,7 +59,7 @@
     };
     const closeList = () => { if (listType) { output.push(`</${listType}>`); listType = null; } };
     const closeQuote = () => { if (inQuote) { output.push("</blockquote>"); inQuote = false; } };
-    for (const line of lines) {
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {\n      const line = lines[lineIndex];
       const codeMatch = line.match(/^@@CODE(\d+)@@$/);
       if (codeMatch) { flushParagraph(); closeList(); closeQuote(); output.push(codeBlocks[Number(codeMatch[1])] || ""); continue; }
       const heading = line.match(/^(#{1,3})\s+(.+)$/);
@@ -76,7 +76,7 @@
         if (!inQuote) { output.push("<blockquote>"); inQuote = true; }
         output.push(line.replace(/^&gt;\s?/, "") + "<br>"); continue;
       }
-      if (!line.trim()) {\n        flushParagraph();\n        const nextLine = lines.slice(lines.indexOf(line) + 1).find((item) => item.trim());\n        if (listType === "ol" && nextLine && /^\\s*\\d+[.)]\\s+/.test(nextLine)) continue;\n        if (listType === "ul" && nextLine && /^\\s*[-*+]\\s+/.test(nextLine)) continue;\n        closeList(); closeQuote(); continue;\n      }
+      if (!line.trim()) {\n        flushParagraph();\n        const nextLine = lines.slice(lineIndex + 1).find((item) => item.trim());\n        if (listType === "ol" && nextLine && /^\\s*\\d+[.)]\\s+/.test(nextLine)) continue;\n        if (listType === "ul" && nextLine && /^\\s*[-*+]\\s+/.test(nextLine)) continue;\n        closeList(); closeQuote(); continue;\n      }
       closeList(); closeQuote(); paragraph.push(line);
     }
     flushParagraph(); closeList(); closeQuote();
