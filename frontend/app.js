@@ -233,17 +233,76 @@
     }
     state.messages.push({ role: "user", content: message, created_at: new Date().toISOString() });
     renderMessages(); els.messageInput.value = ""; resizeInput(); setBusy(true); showTyping();
+    const requestStarted = performance.now();
+    let firstTokenMs = null;
+    let assistantIndex = -1;
+    let completion = null;
     try {
-      const result = await api("/api/v1/chat", { method: "POST", body: JSON.stringify({ session_id: state.sessionId, message }) });
+      const response = await fetch(API + "/api/v1/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+        body: JSON.stringify({ session_id: state.sessionId, message })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail || `Request failed (${response.status})`);
+      }
+      if (!response.body) throw new Error("This browser does not support streamed responses.");
       removeTyping();
-      state.messages.push({ role: "assistant", content: result.answer, metadata: { provider: result.provider, model: result.model, sources: result.sources || [], grounded: result.grounded }, created_at: new Date().toISOString() });
-      state.lastAnswer = result.answer || "";
-      renderMessages(); renderSources(result.sources || [], result.grounded);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamError = null;
+      const handleEvent = (rawEvent) => {
+        const data = rawEvent.split("\\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\\n");
+        if (!data) return;
+        let event;
+        try { event = JSON.parse(data); } catch { return; }
+        if (event.type === "token") {
+          if (firstTokenMs === null) firstTokenMs = Math.round(performance.now() - requestStarted);
+          if (assistantIndex < 0) {
+            state.messages.push({ role: "assistant", content: "", metadata: { streaming: true }, created_at: new Date().toISOString() });
+            assistantIndex = state.messages.length - 1;
+          }
+          state.messages[assistantIndex].content += event.text || "";
+          renderMessages();
+        } else if (event.type === "done") {
+          completion = event;
+        } else if (event.type === "error") {
+          streamError = new Error(event.message || "Streaming generation failed.");
+        }
+      };
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const events = buffer.split("\\n\\n");
+        buffer = events.pop() || "";
+        for (const rawEvent of events) handleEvent(rawEvent);
+        if (done) break;
+      }
+      if (buffer.trim()) handleEvent(buffer);
+      if (streamError) throw streamError;
+      if (assistantIndex < 0) throw new Error("The stream ended without answer text.");
+      const finalMessage = state.messages[assistantIndex];
+      finalMessage.metadata = {
+        provider: completion?.provider || "ollama",
+        model: completion?.model || "qwen2.5:7b",
+        sources: completion?.sources || [],
+        grounded: Boolean(completion?.grounded),
+        latency: completion ? { first_token_ms: firstTokenMs, retrieval_ms: completion.retrieval_ms, generation_ms: completion.generation_ms, total_ms: completion.total_ms } : { first_token_ms: firstTokenMs }
+      };
+      state.lastAnswer = finalMessage.content;
+      renderMessages(); renderSources(completion?.sources || [], Boolean(completion?.grounded));
       const session = state.sessions.find((item) => item.id === state.sessionId) || { id: state.sessionId, created_at: new Date().toISOString() };
       upsertSession({ ...session, title: session.title === "New conversation" || !session.title ? shortTitle(message) : session.title, updated_at: new Date().toISOString() });
+      if (completion) {
+        console.info("[Lenny latency]", { first_token_ms: firstTokenMs, retrieval_ms: completion.retrieval_ms, generation_ms: completion.generation_ms, total_ms: completion.total_ms });
+        showToast(`First text ${firstTokenMs} ms · Retrieval ${completion.retrieval_ms} ms · Generation ${completion.generation_ms} ms`);
+      }
     } catch (error) {
       removeTyping();
-      state.messages.push({ role: "assistant", content: `I couldn't complete that request. **${error.message}**\n\nCheck that FastAPI, PostgreSQL, and Ollama are running, then try again.`, metadata: { error: true }, created_at: new Date().toISOString() });
+      if (assistantIndex >= 0) state.messages.splice(assistantIndex, 1);
+      state.messages.push({ role: "assistant", content: `I couldn't complete that request. **${error.message}**\\n\\nCheck that FastAPI, PostgreSQL, and Ollama are running, then try again.`, metadata: { error: true }, created_at: new Date().toISOString() });
       renderMessages(); showToast(error.message || "Request failed.");
     } finally { setBusy(false); els.messageInput.focus(); }
   }
