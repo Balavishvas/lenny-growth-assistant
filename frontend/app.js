@@ -151,8 +151,15 @@
     return session;
   }
   async function refreshSessionList() {
-    // Session listing isn't exposed by the current API; retain sessions known to this browser.
-    renderSessions();
+    try {
+      const sessions = await api("/api/v1/sessions");
+      state.sessions = Array.isArray(sessions) ? sessions : [];
+      renderSessions();
+      persist();
+      showToast(`Loaded ${state.sessions.length} recent conversation${state.sessions.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      showToast("Could not refresh conversations: " + error.message);
+    }
   }
   async function selectSession(id) {
     if (!id || state.busy) return;
