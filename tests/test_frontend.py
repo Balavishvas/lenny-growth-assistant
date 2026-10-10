@@ -8,7 +8,7 @@ def test_workspace_homepage_is_served():
         response = client.get("/")
 
     assert response.status_code == 200
-    assert "Lenny — Growth Research Workspace" in response.text
+    assert "Lenny — Editorial Growth Intelligence" in response.text
     assert 'id="messageInput"' in response.text
 
 
