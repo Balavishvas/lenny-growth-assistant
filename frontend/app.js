@@ -13,7 +13,7 @@
     artifactView: $("#artifactView"), artifactText: $("#artifactText"), artifactName: $("#artifactName"),
     artifactWordCount: $("#artifactWordCount"), previewCanvas: $("#previewCanvas"), previewLabel: $("#previewLabel"),
     createArtifact: $("#createArtifact"), downloadArtifact: $("#downloadArtifact"), copyArtifact: $("#copyArtifact"),
-    settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle")
+    settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle"), modelStatus: $("#modelStatus")
   };
   const state = {
     sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "",
@@ -389,8 +389,24 @@
   function toggleTheme() {
     applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
   }
+  async function loadModelStatus() {
+    if (!els.modelStatus) return;
+    try {
+      const config = await api("/api/v1/config");
+      const provider = String(config.provider || "unknown");
+      const model = String(config.model || "unknown");
+      const prettyModel = model.replace(/^qwen2\.5:(\d+)b$/i, "Qwen 2.5 $1B");
+      els.modelStatus.innerHTML = `<i class="status-dot"></i> ${escapeHtml(provider)} · ${escapeHtml(prettyModel)}`;
+      els.modelStatus.title = `Active backend model: ${model}`;
+    } catch (error) {
+      els.modelStatus.textContent = "Model status unavailable";
+      els.modelStatus.title = error.message;
+    }
+  }
   function showSettings() {
-    showToast("Model: Qwen 2.5 7B · Provider: local Ollama · Sources: PostgreSQL + pgvector");
+    api("/api/v1/config").then((config) => {
+      showToast(`Model: ${config.model} · Provider: ${config.provider} · Sources: PostgreSQL + pgvector`);
+    }).catch(() => showToast("Could not read model settings from the backend."));
   }
   function scrollToSource(index) {
     const source = $("#source-" + index);
@@ -462,6 +478,7 @@
 
   async function init() {
     loadPersisted();
+    loadModelStatus();
     let savedTheme = "light";
     try { savedTheme = localStorage.getItem(THEME_KEY) || "light"; } catch { /* Use light theme by default. */ }
     applyTheme(savedTheme, false);
