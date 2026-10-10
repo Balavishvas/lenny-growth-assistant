@@ -3,6 +3,8 @@
 from contextlib import asynccontextmanager
 from collections.abc import Generator
 from pathlib import Path
+import logging
+import time
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -32,6 +34,7 @@ from app.schemas import (
 )
 
 settings = get_settings()
+logger = logging.getLogger("lenny.latency")
 NO_EVIDENCE_ANSWER = (
     "I couldn't find enough relevant evidence in the indexed Lenny content to answer that "
     "reliably. Try rephrasing the question or asking about a product, growth, or startup topic "
@@ -231,6 +234,8 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
         if item.role in {"user", "assistant"}
     ]
 
+    request_started = time.perf_counter()
+    retrieval_started = time.perf_counter()
     try:
         sources = retrieve_chunks(payload.message, db, settings.retrieval_top_k)
     except httpx.TimeoutException:
@@ -243,6 +248,8 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
     except (RuntimeError, ValueError):
         raise HTTPException(status_code=502, detail="Knowledge retrieval failed. Check the embedding configuration.") from None
 
+    retrieval_ms = round((time.perf_counter() - retrieval_started) * 1000, 2)
+    generation_ms = 0.0
     user_message = ChatMessage(
         session_id=payload.session_id,
         role="user",
@@ -270,7 +277,9 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
             f"{_format_evidence(sources)}"
         )
         try:
+            generation_started = time.perf_counter()
             answer = generate_reply([{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}])
+            generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="The local model timed out. Try again.") from None
         except httpx.HTTPError:
@@ -298,6 +307,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
     db.commit()
     db.refresh(assistant_message)
 
+    logger.info("chat_latency session_id=%s retrieval_ms=%.2f generation_ms=%.2f total_ms=%.2f sources=%d", payload.session_id, retrieval_ms, generation_ms, (time.perf_counter() - request_started) * 1000, len(sources))
     return {
         "session_id": payload.session_id,
         "user_message_id": user_message.id,
