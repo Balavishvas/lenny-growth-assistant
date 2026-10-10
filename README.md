@@ -10,6 +10,7 @@ A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and n
 - Markdown transcript parsing, overlapping chunking, batched embeddings, repeatable ingestion, and source metadata.
 - Vector similarity search exposed through `POST /api/v1/retrieval/search`.
 - RAG-powered chat that supplies retrieved passages to the local model, returns traceable source chunks, persists source metadata, and uses an honest fallback when retrieval finds no passages.
+- Responsive research workspace UI with conversation history, Markdown answer rendering, clickable source citations, and a side-by-side artifact editor/preview.
 - Tests for transcript chunking/parsing, chat grounding, source persistence, and unsupported-question fallback.
 
 ## Architecture
@@ -19,7 +20,9 @@ A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and n
 - **Local chat model:** Ollama `qwen2.5:7b`
 - **Local embedding model:** Ollama `nomic-embed-text`
 - **Retrieval:** transcript ingestion, chunking, vector similarity search, and source attribution
-- **Frontend / agent / artifacts:** subsequent milestones
+- **Frontend:** static HTML/CSS/JavaScript served by FastAPI at `/`; no Node.js build step required
+- **Artifacts:** browser-local editable Markdown/HTML drafts with sandboxed HTML preview and export
+- **Agent / Ship 30 writing skill / server-side artifact persistence:** subsequent milestones
 
 ## Quick start
 
@@ -49,9 +52,9 @@ Create a session with `POST /api/v1/sessions`, then send a message to `POST /api
 ## Next milestones
 
 - [ ] Add retrieval evaluation with a fixed query/expected-source set (Recall@K, MRR, Precision@K).
-- [ ] Implement the dedicated Ship 30 for 30 writing skill.
-- [ ] Add artifact generation and isolated side-by-side viewer.
-- [ ] Build the frontend, provider controls, and comprehensive end-to-end tests.
+- [ ] Implement the dedicated Ship 30 for 30 writing skill and stronger artifact-generation flow.
+- [ ] Add server-side artifact persistence and comprehensive frontend end-to-end tests.
+- [ ] Add provider controls, Docker Compose, handoff documentation, and demo recording.
 - [ ] Docker Compose, handoff documentation, and demo recording.
 
 ## Project documents
