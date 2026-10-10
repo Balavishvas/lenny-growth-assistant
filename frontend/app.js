@@ -59,7 +59,8 @@
     };
     const closeList = () => { if (listType) { output.push(`</${listType}>`); listType = null; } };
     const closeQuote = () => { if (inQuote) { output.push("</blockquote>"); inQuote = false; } };
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {\n      const line = lines[lineIndex];
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
       const codeMatch = line.match(/^@@CODE(\d+)@@$/);
       if (codeMatch) { flushParagraph(); closeList(); closeQuote(); output.push(codeBlocks[Number(codeMatch[1])] || ""); continue; }
       const heading = line.match(/^(#{1,3})\s+(.+)$/);
