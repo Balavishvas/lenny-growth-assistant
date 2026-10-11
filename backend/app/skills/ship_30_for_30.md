@@ -18,6 +18,7 @@ Write a publishable, approximately 1,250-word essay for product builders. The re
 - Prefer a connected argument over a collection of generic tips. Each section must add a new mechanism, implication, counterpoint, or decision.
 
 ## Evidence, citations, and quotations
+- Never invent a source, citation, quotation, metric, timestamp, or speaker attribution.
 - Use the exact bracket number assigned by the application, e.g. [1]. Place it next to the specific factual claim it supports. Never invent or guess numbers.
 - Cite material claims about podcast guests, frameworks, reported examples, and interview advice. Do not add a citation just to satisfy a format check: the cited passage must support the adjacent claim.
 - Keep attribution precise. Do not blend different guests' opinions or turn the assistant's interpretation into a guest's statement.
