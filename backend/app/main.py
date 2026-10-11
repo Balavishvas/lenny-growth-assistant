@@ -86,6 +86,7 @@ from app.writing_skill import (
     build_essay_revision_messages,
     essay_needs_revision,
     essay_quality_issues,
+    select_better_essay,
     is_ship30_request,
 )
 from app.schemas import (
@@ -564,19 +565,30 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
                 initial_sources=normalized_sources,
                 num_predict=token_budget,
             ).strip()
-            if is_essay and essay_needs_revision(answer):
-                logger.warning(
-                    "ship30_quality_retry session_id=%s initial_words=%d",
-                    payload.session_id,
-                    len(answer.split()),
-                )
-                answer = _call_with_optional_tool_callback(
-                    generate_reply,
-                    build_essay_revision_messages(messages, answer),
-                    on_tool_call=handle_tool_call,
-                    initial_sources=normalized_sources,
-                    num_predict=token_budget,
-                ).strip()
+            if is_essay:
+                initial_answer = answer
+                initial_issues = essay_quality_issues(initial_answer, normalized_sources)
+                if initial_issues:
+                    logger.warning(
+                        "ship30_quality_retry session_id=%s initial_words=%d issues=%s",
+                        payload.session_id,
+                        len(initial_answer.split()),
+                        ",".join(initial_issues),
+                    )
+                    revised_answer = _call_with_optional_tool_callback(
+                        generate_reply,
+                        build_essay_revision_messages(messages, initial_answer),
+                        on_tool_call=handle_tool_call,
+                        initial_sources=normalized_sources,
+                        num_predict=token_budget,
+                    ).strip()
+                    _merge_tool_sources(normalized_sources, tool_sources)
+                    answer, selected_issues = select_better_essay(initial_answer, revised_answer, normalized_sources)
+                    logger.info(
+                        "ship30_draft_selection session_id=%s original_words=%d revised_words=%d selected_words=%d issues=%s",
+                        payload.session_id, len(initial_answer.split()), len(revised_answer.split()),
+                        len(answer.split()), ",".join(selected_issues) or "none",
+                    )
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             _merge_tool_sources(normalized_sources, tool_sources)
         except httpx.TimeoutException:
