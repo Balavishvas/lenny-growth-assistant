@@ -289,10 +289,14 @@
         model: completion?.model || "qwen2.5:7b",
         sources: completion?.sources || [],
         grounded: Boolean(completion?.grounded),
+        quality_issues: completion?.quality_issues || [],
         latency: completion ? { first_token_ms: firstTokenMs, retrieval_ms: completion.retrieval_ms, generation_ms: completion.generation_ms, total_ms: completion.total_ms } : { first_token_ms: firstTokenMs }
       };
       state.lastAnswer = finalMessage.content;
       renderMessages(); renderSources(completion?.sources || [], Boolean(completion?.grounded));
+      if (finalMessage.metadata.quality_issues.length) {
+        showToast("Essay quality checks flagged: " + finalMessage.metadata.quality_issues.join(", ").replaceAll("_", " ") + ". Review the draft before using it.");
+      }
       const session = state.sessions.find((item) => item.id === state.sessionId) || { id: state.sessionId, created_at: new Date().toISOString() };
       upsertSession({ ...session, title: session.title === "New conversation" || !session.title ? shortTitle(message) : session.title, updated_at: new Date().toISOString() });
       if (completion) {
