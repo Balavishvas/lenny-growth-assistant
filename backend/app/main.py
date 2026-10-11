@@ -64,7 +64,7 @@ def _call_with_optional_tool_callback(
     return func(*args, **call_kwargs)
 from app.models import ChatMessage, ChatSession
 from app.retrieval import retrieve_chunks
-from app.writing_skill import apply_writing_skill
+from app.writing_skill import (\n    apply_writing_skill,\n    build_essay_revision_messages,\n    essay_needs_revision,\n    is_ship30_request,\n)
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -380,18 +380,44 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
         answer_parts = []
         generation_started = time.perf_counter()
         try:
-            stream_iter = _call_with_optional_tool_callback(
-                stream_reply,
-                messages,
-                on_tool_call=handle_tool_call,
-                initial_sources=normalized_sources,
-            )
-            for token in stream_iter:
-                answer_parts.append(token)
-                yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
-            answer = "".join(answer_parts).strip()
-            if not answer:
-                raise ValueError("Model returned an empty response")
+            if is_ship30_request(payload.message):
+                # Long-form essays are buffered so we can reject obvious search-summary/short-draft failures
+                # before exposing them as the final answer. Ordinary chat remains token-streamed.
+                answer = _call_with_optional_tool_callback(
+                    generate_reply,
+                    messages,
+                    on_tool_call=handle_tool_call,
+                    initial_sources=normalized_sources,
+                ).strip()
+                if essay_needs_revision(answer):
+                    logger.warning(
+                        "ship30_quality_retry session_id=%s initial_words=%d",
+                        payload.session_id,
+                        len(answer.split()),
+                    )
+                    answer = _call_with_optional_tool_callback(
+                        generate_reply,
+                        build_essay_revision_messages(messages, answer),
+                        on_tool_call=handle_tool_call,
+                        initial_sources=normalized_sources,
+                    ).strip()
+                if not answer:
+                    raise ValueError("Model returned an empty response")
+                answer_parts.append(answer)
+                yield "data: " + json.dumps({"type": "token", "text": answer}) + "\n\n"
+            else:
+                stream_iter = _call_with_optional_tool_callback(
+                    stream_reply,
+                    messages,
+                    on_tool_call=handle_tool_call,
+                    initial_sources=normalized_sources,
+                )
+                for token in stream_iter:
+                    answer_parts.append(token)
+                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
+                answer = "".join(answer_parts).strip()
+                if not answer:
+                    raise ValueError("Model returned an empty response")
 
             _merge_tool_sources(normalized_sources, tool_sources)
 
@@ -491,12 +517,25 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
         system_prompt = apply_writing_skill(_build_system_prompt(sources), payload.message)
         try:
             generation_started = time.perf_counter()
+            messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
             answer = _call_with_optional_tool_callback(
                 generate_reply,
-                [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}],
+                messages,
                 on_tool_call=handle_tool_call,
                 initial_sources=normalized_sources,
-            )
+            ).strip()
+            if is_ship30_request(payload.message) and essay_needs_revision(answer):
+                logger.warning(
+                    "ship30_quality_retry session_id=%s initial_words=%d",
+                    payload.session_id,
+                    len(answer.split()),
+                )
+                answer = _call_with_optional_tool_callback(
+                    generate_reply,
+                    build_essay_revision_messages(messages, answer),
+                    on_tool_call=handle_tool_call,
+                    initial_sources=normalized_sources,
+                ).strip()
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             _merge_tool_sources(normalized_sources, tool_sources)
         except httpx.TimeoutException:
