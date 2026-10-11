@@ -66,6 +66,7 @@ from app.models import ChatMessage, ChatSession
 from app.retrieval import retrieve_chunks
 from app.writing_skill import (
     apply_writing_skill,
+    enforce_essay_output_contract,
     build_essay_revision_messages,
     essay_needs_revision,
     essay_quality_issues,
@@ -365,6 +366,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
 
     system_prompt = apply_writing_skill(_build_system_prompt(sources), payload.message)
     messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
+    messages = enforce_essay_output_contract(messages)
 
     tool_call_count = 0
     tool_sources: list[dict] = []
@@ -510,6 +512,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
         try:
             generation_started = time.perf_counter()
             messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
+    messages = enforce_essay_output_contract(messages)
             answer = _call_with_optional_tool_callback(
                 generate_reply,
                 messages,
