@@ -63,10 +63,10 @@
       const line = lines[lineIndex];
       const codeMatch = line.match(/^@@CODE(\d+)@@$/);
       if (codeMatch) { flushParagraph(); closeList(); closeQuote(); output.push(codeBlocks[Number(codeMatch[1])] || ""); continue; }
-      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      const heading = line.match(/^(#{1,6})\s+(.+)$/);
       const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
       const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
-      if (heading) { flushParagraph(); closeList(); closeQuote(); const level = heading[1].length; output.push(`<h${level}>${heading[2]}</h${level}>`); continue; }
+      if (heading) { flushParagraph(); closeList(); closeQuote(); const level = Math.min(heading[1].length, 6); output.push(`<h${level}>${heading[2]}</h${level}>`); continue; }
       if (unordered || ordered) {
         flushParagraph(); closeQuote(); const type = unordered ? "ul" : "ol";
         if (listType !== type) { closeList(); output.push(`<${type}>`); listType = type; }
@@ -254,7 +254,7 @@
       let buffer = "";
       let streamError = null;
       const handleEvent = (rawEvent) => {
-        const data = rawEvent.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
+        const data = rawEvent.replace(/\r/g, "").split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
         if (!data) return;
         let event;
         try { event = JSON.parse(data); } catch { return; }
@@ -275,7 +275,7 @@
       while (true) {
         const { value, done } = await reader.read();
         buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-        const events = buffer.split("\n\n");
+        const events = buffer.split(/\r?\n\r?\n/);
         buffer = events.pop() || "";
         for (const rawEvent of events) handleEvent(rawEvent);
         if (done) break;

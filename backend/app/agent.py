@@ -74,13 +74,14 @@ def generate_agent_reply(
     messages: list[dict[str, str]],
     on_tool_call: Callable[[str, dict, list[dict]], None] | None = None,
     initial_sources: list[dict] | None = None,
+    num_predict: int | None = None,
 ) -> str:
     """Use Pi Coding Agent when selected; retain native Ollama as a fallback."""
     settings = get_settings()
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
-        return generate_reply(messages)
+        return generate_reply(messages, num_predict=num_predict)
     if runtime != "pi":
         raise RuntimeError(f"Unsupported agent runtime: {runtime}")
 
@@ -153,13 +154,14 @@ def stream_agent_reply(
     messages: list[dict[str, str]],
     on_tool_call: Callable[[str, dict, list[dict]], None] | None = None,
     initial_sources: list[dict] | None = None,
+    num_predict: int | None = None,
 ) -> Iterator[str]:
     """Stream output from the selected runtime while preserving the SSE token contract."""
     settings = get_settings()
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s streaming=true", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
-        yield from stream_reply(messages)
+        yield from stream_reply(messages, num_predict=num_predict)
         return
     if runtime != "pi":
         raise RuntimeError(f"Unsupported agent runtime: {runtime}")

@@ -19,6 +19,13 @@ def test_ship30_trigger_phrases_are_case_and_whitespace_insensitive():
     assert is_ship30_request("Can you WRITE AN ESSAY about product-market fit?")
     assert is_ship30_request("Draft a 1,250 word essay")
     assert is_ship30_request("  long-form   essay  ")
+    assert is_ship30_request("Ship30 essay on PMF")
+    assert is_ship30_request("Write a Ship-30 essay")
+    assert is_ship30_request("Draft a 1250-word essay")
+    assert is_ship30_request("Draft a 1,250-word essay")
+    assert is_ship30_request("Write a 1,100 word essay")
+    assert is_ship30_request("Draft a 1,400-word essay")
+    assert is_ship30_request("30for30 essay")
 
 
 def test_regular_research_question_does_not_activate_writing_skill():

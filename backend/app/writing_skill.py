@@ -6,8 +6,11 @@ import re
 
 _SKILL_PATH = Path(__file__).resolve().parent / "skills" / "ship_30_for_30.md"
 _TRIGGER_PHRASES = (
-    "ship 30 for 30", "ship 30", "30 for 30", "1250 word essay",
-    "1,250 word essay", "write an essay", "draft an essay",
+    "ship 30 for 30", "ship 30", "30 for 30",
+    "1250 word essay", "1,250 word essay",
+    "1100 word essay", "1,100 word essay",
+    "1400 word essay", "1,400 word essay",
+    "write an essay", "draft an essay",
     "write me an essay", "long-form essay", "long form essay",
 )
 _SUMMARY_OPENERS = (
@@ -19,7 +22,10 @@ _SUMMARY_OPENERS = (
 
 def is_ship30_request(message: str) -> bool:
     """Return whether the user explicitly asks for the long-form writing workflow."""
-    normalized = " ".join(message.casefold().split())
+    normalized = re.sub(r"[-_]", " ", message.casefold())
+    normalized = re.sub(r"ship\s*30", "ship 30", normalized)
+    normalized = re.sub(r"30\s*for\s*30", "30 for 30", normalized)
+    normalized = " ".join(normalized.split())
     return any(phrase in normalized for phrase in _TRIGGER_PHRASES)
 
 

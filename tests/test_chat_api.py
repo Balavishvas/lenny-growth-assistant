@@ -370,3 +370,124 @@ def test_call_with_optional_tool_callback_signature_inspection():
 
     with pytest.raises(TypeError, match="internal bug inside model"):
         _call_with_optional_tool_callback(buggy_func, "hello", on_tool_call=lambda *a: None)
+
+
+def test_setup_logging_configures_root_and_lenny_logger():
+    import logging
+    from app.main import setup_logging
+
+    # When uvicorn logger has handlers, they should be attached to root
+    mock_handler = logging.StreamHandler()
+    uvicorn_logger = logging.getLogger("uvicorn")
+    uvicorn_logger.handlers = [mock_handler]
+
+    setup_logging()
+
+    assert mock_handler in logging.root.handlers
+    assert logging.getLogger("lenny").level == logging.INFO
+    # Clean up mock handler
+    uvicorn_logger.handlers.remove(mock_handler)
+    if mock_handler in logging.root.handlers:
+        logging.root.handlers.remove(mock_handler)
+
+
+def test_stream_chat_ship30_logs_quality_and_passes_token_budget(monkeypatch, caplog):
+    import logging
+    session_id = _new_session()
+    captured_kwargs = {}
+
+    monkeypatch.setattr(main, "retrieve_chunks", lambda query, db, top_k: [FAKE_SOURCE])
+
+    # 1100+ word essay draft with proper title, valid markdown, and citations
+    full_essay_body = ("In Lenny's interviews, great products solve deep customer problems [1]. " * 120)
+    full_essay = "# The Art of Product-Market Fit\n\n" + full_essay_body
+
+    def fake_stream(messages, on_tool_call=None, initial_sources=None, num_predict=None):
+        captured_kwargs["num_predict"] = num_predict
+        tokens = [full_essay[:200], full_essay[200:600], full_essay[600:]]
+        yield from tokens
+
+    monkeypatch.setattr(main, "stream_reply", fake_stream)
+
+    with caplog.at_level(logging.INFO, logger="lenny.latency"):
+        response = client.post(
+            "/api/v1/chat/stream",
+            json={
+                "session_id": session_id,
+                "message": "Write a Ship 30 for 30 essay about finding product-market fit",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    # Verified token budget for essay is higher than regular 384
+    assert captured_kwargs.get("num_predict") == 2500
+
+    # Verified ship30_stream_quality appears in logs with passed=True and issues=none
+    quality_logs = [rec.message for rec in caplog.records if "ship30_stream_quality" in rec.message]
+    assert len(quality_logs) == 1
+    log_msg = quality_logs[0]
+    assert "first_token_streamed=true" in log_msg
+    assert "passed=True" in log_msg
+    assert "issues=none" in log_msg
+    assert f"session_id={session_id}" in log_msg
+
+
+def test_stream_chat_ship30_logs_quality_issues_on_short_draft(monkeypatch, caplog):
+    import logging
+    session_id = _new_session()
+
+    monkeypatch.setattr(main, "retrieve_chunks", lambda query, db, top_k: [FAKE_SOURCE])
+
+    short_draft = "# Title\n\nA very short essay [1]."
+
+    def fake_stream(messages, on_tool_call=None, initial_sources=None, num_predict=None):
+        yield short_draft
+
+    monkeypatch.setattr(main, "stream_reply", fake_stream)
+
+    with caplog.at_level(logging.INFO, logger="lenny.latency"):
+        response = client.post(
+            "/api/v1/chat/stream",
+            json={
+                "session_id": session_id,
+                "message": "Draft a 1,250-word essay about PMF",
+            },
+        )
+
+    assert response.status_code == 200
+    quality_logs = [rec.message for rec in caplog.records if "ship30_stream_quality" in rec.message]
+    assert len(quality_logs) == 1
+    log_msg = quality_logs[0]
+    assert "passed=False" in log_msg
+    assert "short_draft" in log_msg
+
+
+def test_stream_chat_regular_chat_preserves_default_num_predict(monkeypatch, caplog):
+    import logging
+    session_id = _new_session()
+    captured_kwargs = {}
+
+    monkeypatch.setattr(main, "retrieve_chunks", lambda query, db, top_k: [FAKE_SOURCE])
+
+    def fake_stream(messages, on_tool_call=None, initial_sources=None, num_predict=None):
+        captured_kwargs["num_predict"] = num_predict
+        yield "Regular answer [1]."
+
+    monkeypatch.setattr(main, "stream_reply", fake_stream)
+
+    with caplog.at_level(logging.INFO, logger="lenny.latency"):
+        response = client.post(
+            "/api/v1/chat/stream",
+            json={
+                "session_id": session_id,
+                "message": "What is product-market fit?",
+            },
+        )
+
+    assert response.status_code == 200
+    # Regular chat keeps default 384 tokens
+    assert captured_kwargs.get("num_predict") == 384
+    # No ship30 quality check logged for regular questions
+    quality_logs = [rec.message for rec in caplog.records if "ship30_stream_quality" in rec.message]
+    assert len(quality_logs) == 0
