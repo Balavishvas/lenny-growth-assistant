@@ -120,3 +120,44 @@ def test_output_contract_is_idempotent():
     once = enforce_essay_output_contract(messages)
     twice = enforce_essay_output_contract(once)
     assert twice == once
+
+
+
+def test_thesis_contradiction_is_flagged_for_activation_opposite_title():
+    essay = (
+        "# Product-Market Fit Is Not an Activation Problem\n\n"
+        "The primary focus should shift from product-market fit to activation. "
+        + ("A supporting paragraph with evidence [1]. " * 320)
+    )
+    assert "thesis_contradiction" in essay_quality_issues(essay)
+
+
+def test_citations_outside_retrieved_source_range_are_flagged():
+    essay = (
+        "# Evidence-Led Product Strategy\n\n"
+        + ("A supported claim follows from the interview [1]. " * 320)
+        + " An invented citation appears here [7]."
+    )
+    sources = [{"content": "A supported claim follows from the interview."}]
+    assert "citation_out_of_range" in essay_quality_issues(essay, sources)
+
+
+def test_unverified_long_direct_quote_is_flagged():
+    essay = (
+        "# Evidence-Led Product Strategy\n\n"
+        + ("Useful analysis supported by the retrieved passage [1]. " * 320)
+        + ' The guest said, "Activation automatically happens when every product has achieved perfect market fit through continuous iteration." [1]'
+    )
+    sources = [{"content": "The passage discusses product research and customer interviews."}]
+    assert "unverified_direct_quote" in essay_quality_issues(essay, sources)
+
+
+def test_exact_quote_present_in_source_is_not_flagged():
+    quote = "Strong products solve a frequent and important user problem"
+    essay = (
+        "# Evidence-Led Product Strategy\n\n"
+        + ("Useful analysis supported by the retrieved passage [1]. " * 320)
+        + f' The transcript says, "{quote}." [1]'
+    )
+    sources = [{"content": quote}]
+    assert "unverified_direct_quote" not in essay_quality_issues(essay, sources)
