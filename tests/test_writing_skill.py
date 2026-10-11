@@ -4,7 +4,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app.writing_skill import apply_writing_skill, is_ship30_request  # noqa: E402
+from app.writing_skill import (  # noqa: E402
+    apply_writing_skill,
+    build_essay_revision_messages,
+    essay_needs_revision,
+    is_ship30_request,
+)
 
 
 def test_ship30_trigger_phrases_are_case_and_whitespace_insensitive():
@@ -25,8 +30,36 @@ def test_writing_skill_is_injected_and_preserves_grounding_rules():
     result = apply_writing_skill(base, "Write an essay about finding product-market fit")
     assert result.startswith(base)
     assert "Active writing workflow: Ship 30 for 30" in result
-    assert "Never invent a source, quote, metric" in result
-    assert "approximately 1,250 words" in result
+    assert "Never invent a source" in result
+    assert "approximately 1,250 words" in result or "1,100–1,400 words" in result
+    assert "finished essay itself" in result
+    assert "not a search report" in result
+
+
+def test_short_search_summary_is_flagged_for_revision():
+    summary = (
+        "The search for the passages related to your query has been successful. "
+        "Here are the findings. Rahul Vohra says to focus on product market fit."
+    )
+    assert essay_needs_revision(summary)
+
+
+def test_short_essay_is_flagged_but_full_title_led_essay_passes():
+    short = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Some text. " * 80)
+    assert essay_needs_revision(short)
+
+    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph text. " * 300)
+    assert not essay_needs_revision(long)
+
+
+def test_revision_prompt_preserves_context_and_demands_complete_essay():
+    messages = [{"role": "system", "content": "Use grounded citations."}, {"role": "user", "content": "Write an essay."}]
+    revised = build_essay_revision_messages(messages, "A short first draft.")
+    assert revised[:2] == messages
+    assert revised[-1]["role"] == "user"
+    assert "not a summary of search results" in revised[-1]["content"]
+    assert "1,100–1,400 words" in revised[-1]["content"]
+    assert "A short first draft." in revised[-1]["content"]
 
 
 def test_missing_skill_file_does_not_break_chat(monkeypatch):
