@@ -47,8 +47,16 @@ def apply_writing_skill(system_prompt: str, user_message: str) -> str:
     )
 
 
-def essay_quality_issues(answer: str) -> list[str]:
-    """Return deterministic checks that can identify obviously incomplete essay drafts."""
+def _normalize_quote_text(value: str) -> str:
+    """Normalize punctuation and case for conservative quote matching."""
+    return " ".join(re.findall(r"\w+", value.casefold()))
+
+
+def essay_quality_issues(answer: str, sources: list[dict] | None = None) -> list[str]:
+    """Check essay completeness plus detectable thesis, citation, and quote failures.
+
+    These are deterministic warning signals, not proof that an essay is factually correct.
+    """
     text = answer.strip()
     issues: list[str] = []
     if not text:
@@ -61,12 +69,43 @@ def essay_quality_issues(answer: str) -> list[str]:
         issues.append("short_draft")
     if not has_title:
         issues.append("missing_title")
-    # Citation syntax is a cheap proxy only; it does not prove each claim is supported.
-    if not re.search(r"\[\d+\]", text):
+    citations = [int(number) for number in re.findall(r"\[(\d+)\]", text)]
+    if not citations:
         issues.append("missing_citations")
+    # Source indexes are one-based and must resolve to the sources shown in the UI.
+    if sources and any(number < 1 or number > len(sources) for number in citations):
+        issues.append("citation_out_of_range")
     # Catch escaped heading/separator markers that show up literally in the preview.
     if re.search(r"(?m)^\\#{1,6}\s|^\\---\s*$", text):
         issues.append("malformed_markdown")
+
+    # The requested title explicitly rejects activation as the primary engineering goal.
+    # Flag a common opposite thesis rather than trying to infer arbitrary argument semantics.
+    title = re.match(r"^\s{0,3}#{0,2}\s*([^\n]+)", text)
+    if title and re.search(r"product[ -]market fit.*not an activation problem", title.group(1), re.I):
+        intro = text[: min(len(text), 2200)].casefold()
+        contradiction_patterns = (
+            r"primary focus should shift from product.market fit to activation",
+            r"shift (?:the )?focus from product.market fit to activation",
+            r"activation (?:should|must) be the primary (?:focus|objective|goal)",
+        )
+        if any(re.search(pattern, intro) for pattern in contradiction_patterns):
+            issues.append("thesis_contradiction")
+
+    # Only flag substantial direct quotations; short phrases are too ambiguous to verify.
+    # Quote checks are conservative and require supplied source text.
+    if sources:
+        source_text = " ".join(
+            _normalize_quote_text(str(source.get("content", "")))
+            for source in sources if isinstance(source, dict)
+        )
+        quote_candidates = re.findall(r'["“](.{50,500}?)[”"]', text)
+        for quote in quote_candidates:
+            normalized_quote = _normalize_quote_text(quote)
+            quote_words = normalized_quote.split()
+            if len(quote_words) >= 10 and normalized_quote not in source_text:
+                issues.append("unverified_direct_quote")
+                break
     return issues
 
 
