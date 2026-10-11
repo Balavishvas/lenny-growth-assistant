@@ -11,6 +11,7 @@ from app.writing_skill import (  # noqa: E402
     essay_quality_issues,
     enforce_essay_output_contract,
     is_ship30_request,
+    select_better_essay,
 )
 
 
@@ -161,3 +162,27 @@ def test_exact_quote_present_in_source_is_not_flagged():
     )
     sources = [{"content": quote}]
     assert "unverified_direct_quote" not in essay_quality_issues(essay, sources)
+
+
+
+def test_select_better_essay_keeps_original_when_revision_is_shorter_and_worse():
+    original = (
+        "# Product-Market Fit Is Not an Activation Problem\n\n"
+        + ("A supported paragraph about product strategy [1]. " * 350)
+    )
+    revised = "# Product-Market Fit Is Not an Activation Problem\n\nA short draft."
+    sources = [{"content": "Product strategy and market fit."}]
+
+    selected, issues = select_better_essay(original, revised, sources)
+
+    assert selected == original
+    assert issues == essay_quality_issues(original, sources)
+
+
+def test_select_better_essay_rejects_empty_revision():
+    original = "# Evidence-Led Product Strategy\n\nA usable draft."
+
+    selected, issues = select_better_essay(original, "   ")
+
+    assert selected == original
+    assert issues == essay_quality_issues(original, None)
