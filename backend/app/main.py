@@ -425,6 +425,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
 
     def events():
         answer_parts = []
+        quality_issues: list[str] = []
         generation_started = time.perf_counter()
         try:
             # Stream Ship 30 essays as they are generated instead of buffering a full draft
@@ -446,21 +447,21 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             _merge_tool_sources(normalized_sources, tool_sources)
 
             if is_essay:
-                issues = essay_quality_issues(answer, normalized_sources)
+                quality_issues = essay_quality_issues(answer, normalized_sources)
                 words_count = len(re.findall(r"\b[\w’'-]+\b", answer)) or len(answer.split())
                 logger.info(
                     "ship30_stream_quality session_id=%s first_token_streamed=true words=%d passed=%s issues=%s",
                     payload.session_id,
                     words_count,
-                    not issues,
-                    ",".join(issues) or "none",
+                    not quality_issues,
+                    ",".join(quality_issues) or "none",
                 )
 
             assistant_message = ChatMessage(
                 session_id=payload.session_id,
                 role="assistant",
                 content=answer,
-                message_metadata={"provider": settings.llm_provider, "model": settings.ollama_model, "sources": normalized_sources, "grounded": bool(normalized_sources), "tool_invocations": tool_call_count},
+                message_metadata={"provider": settings.llm_provider, "model": settings.ollama_model, "sources": normalized_sources, "grounded": bool(normalized_sources), "tool_invocations": tool_call_count, "quality_issues": quality_issues},
             )
             db.add(assistant_message)
             session.updated_at = models.utc_now()
@@ -469,7 +470,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             total_ms = round((time.perf_counter() - started) * 1000, 2)
             logger.info("chat_stream_latency session_id=%s retrieval_ms=%.2f generation_ms=%.2f total_ms=%.2f sources=%d tool_invocations=%d", payload.session_id, retrieval_ms, generation_ms, total_ms, len(normalized_sources), tool_call_count)
-            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count}) + "\n\n"
+            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count, "quality_issues": quality_issues}) + "\n\n"
         except Exception:
             db.rollback()
             logger.exception("chat_stream_failed session_id=%s", payload.session_id)
