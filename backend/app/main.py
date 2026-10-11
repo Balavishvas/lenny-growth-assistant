@@ -386,55 +386,30 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
         answer_parts = []
         generation_started = time.perf_counter()
         try:
+            # Stream Ship 30 essays as they are generated instead of buffering a full draft
+            # and potentially running a second full generation before showing any text.
+            # Quality checks are diagnostic here: once tokens are shown, retrying would duplicate output.
+            stream_iter = _call_with_optional_tool_callback(
+                stream_reply,
+                messages,
+                on_tool_call=handle_tool_call,
+                initial_sources=normalized_sources,
+            )
+            for token in stream_iter:
+                answer_parts.append(token)
+                yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
+            answer = "".join(answer_parts).strip()
+            if not answer:
+                raise ValueError("Model returned an empty response")
             if is_ship30_request(payload.message):
-                # Long-form essays are buffered so we can reject obvious search-summary/short-draft failures
-                # before exposing them as the final answer. Ordinary chat remains token-streamed.
-                answer = _call_with_optional_tool_callback(
-                    generate_reply,
-                    messages,
-                    on_tool_call=handle_tool_call,
-                    initial_sources=normalized_sources,
-                ).strip()
-                if essay_needs_revision(answer):
-                    logger.warning(
-                        "ship30_quality_retry session_id=%s initial_words=%d",
-                        payload.session_id,
-                        len(answer.split()),
-                    )
-                    retry_started = time.perf_counter()
-                    answer = _call_with_optional_tool_callback(
-                        generate_reply,
-                        build_essay_revision_messages(messages, answer),
-                        on_tool_call=handle_tool_call,
-                        initial_sources=normalized_sources,
-                    ).strip()
-                    retry_ms = round((time.perf_counter() - retry_started) * 1000, 2)
-                    remaining_issues = essay_quality_issues(answer)
-                    logger.info(
-                        "ship30_quality_retry_complete session_id=%s retry_ms=%.2f final_words=%d passed=%s issues=%s",
-                        payload.session_id,
-                        retry_ms,
-                        len(answer.split()),
-                        not remaining_issues,
-                        ",".join(remaining_issues) or "none",
-                    )
-                if not answer:
-                    raise ValueError("Model returned an empty response")
-                answer_parts.append(answer)
-                yield "data: " + json.dumps({"type": "token", "text": answer}) + "\n\n"
-            else:
-                stream_iter = _call_with_optional_tool_callback(
-                    stream_reply,
-                    messages,
-                    on_tool_call=handle_tool_call,
-                    initial_sources=normalized_sources,
+                issues = essay_quality_issues(answer)
+                logger.info(
+                    "ship30_stream_quality session_id=%s first_token_streamed=true words=%d passed=%s issues=%s",
+                    payload.session_id,
+                    len(answer.split()),
+                    not issues,
+                    ",".join(issues) or "none",
                 )
-                for token in stream_iter:
-                    answer_parts.append(token)
-                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
-                answer = "".join(answer_parts).strip()
-                if not answer:
-                    raise ValueError("Model returned an empty response")
 
             _merge_tool_sources(normalized_sources, tool_sources)
 
