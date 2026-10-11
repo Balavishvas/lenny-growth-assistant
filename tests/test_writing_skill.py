@@ -8,6 +8,7 @@ from app.writing_skill import (  # noqa: E402
     apply_writing_skill,
     build_essay_revision_messages,
     essay_needs_revision,
+    essay_quality_issues,
     is_ship30_request,
 )
 
@@ -42,14 +43,30 @@ def test_short_search_summary_is_flagged_for_revision():
         "Here are the findings. Rahul Vohra says to focus on product market fit."
     )
     assert essay_needs_revision(summary)
+    assert "search_summary" in essay_quality_issues(summary)
 
 
-def test_short_essay_is_flagged_but_full_title_led_essay_passes():
+def test_short_essay_is_flagged_for_revision():
     short = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Some text. " * 80)
     assert essay_needs_revision(short)
 
-    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph text. " * 300)
+
+def test_long_title_led_essay_without_citations_is_flagged():
+    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph text. " * 500)
+    assert "missing_citations" in essay_quality_issues(long)
+    assert essay_needs_revision(long)
+
+
+def test_complete_cited_essay_passes_deterministic_checks():
+    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph with evidence [6]. " * 350)
+    assert essay_quality_issues(long) == []
     assert not essay_needs_revision(long)
+
+
+def test_escaped_markdown_heading_is_flagged():
+    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph with evidence [6]. " * 350)
+    malformed = long + "\n\\#### Broken heading\n"
+    assert "malformed_markdown" in essay_quality_issues(malformed)
 
 
 def test_revision_prompt_preserves_context_and_demands_complete_essay():
@@ -59,6 +76,7 @@ def test_revision_prompt_preserves_context_and_demands_complete_essay():
     assert revised[-1]["role"] == "user"
     assert "not a summary of search results" in revised[-1]["content"]
     assert "1,100–1,400 words" in revised[-1]["content"]
+    assert "citation" in revised[-1]["content"]
     assert "A short first draft." in revised[-1]["content"]
 
 
