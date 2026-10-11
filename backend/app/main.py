@@ -68,6 +68,7 @@ from app.writing_skill import (
     apply_writing_skill,
     build_essay_revision_messages,
     essay_needs_revision,
+    essay_quality_issues,
     is_ship30_request,
 )
 from app.schemas import (
@@ -400,12 +401,23 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                         payload.session_id,
                         len(answer.split()),
                     )
+                    retry_started = time.perf_counter()
                     answer = _call_with_optional_tool_callback(
                         generate_reply,
                         build_essay_revision_messages(messages, answer),
                         on_tool_call=handle_tool_call,
                         initial_sources=normalized_sources,
                     ).strip()
+                    retry_ms = round((time.perf_counter() - retry_started) * 1000, 2)
+                    remaining_issues = essay_quality_issues(answer)
+                    logger.info(
+                        "ship30_quality_retry_complete session_id=%s retry_ms=%.2f final_words=%d passed=%s issues=%s",
+                        payload.session_id,
+                        retry_ms,
+                        len(answer.split()),
+                        not remaining_issues,
+                        ",".join(remaining_issues) or "none",
+                    )
                 if not answer:
                     raise ValueError("Model returned an empty response")
                 answer_parts.append(answer)
