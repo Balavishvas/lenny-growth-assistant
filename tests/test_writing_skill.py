@@ -9,6 +9,7 @@ from app.writing_skill import (  # noqa: E402
     build_essay_revision_messages,
     essay_needs_revision,
     essay_quality_issues,
+    enforce_essay_output_contract,
     is_ship30_request,
 )
 
@@ -86,3 +87,29 @@ def test_missing_skill_file_does_not_break_chat(monkeypatch):
     monkeypatch.setattr(module, "_SKILL_PATH", Path("missing-ship30-skill.md"))
     base = "Ground answers in retrieved evidence."
     assert apply_writing_skill(base, "Write an essay") == base
+
+
+
+def test_output_contract_is_appended_to_ship30_user_turn():
+    messages = [
+        {"role": "system", "content": "Ground claims in sources."},
+        {"role": "user", "content": "Write a Ship 30 for 30 essay about product-market fit."},
+    ]
+    result = enforce_essay_output_contract(messages)
+    assert result[0] == messages[0]
+    assert result[-1]["role"] == "user"
+    assert "MANDATORY FINAL OUTPUT FORMAT" in result[-1]["content"]
+    assert "Do NOT summarize retrieved passages" in result[-1]["content"]
+    assert "1,100–1,400-word article" in result[-1]["content"]
+
+
+def test_output_contract_does_not_change_regular_chat():
+    messages = [{"role": "user", "content": "What did Rahul Vohra say about activation?"}]
+    assert enforce_essay_output_contract(messages) == messages
+
+
+def test_output_contract_is_idempotent():
+    messages = [{"role": "user", "content": "Write an essay of 1,250 words."}]
+    once = enforce_essay_output_contract(messages)
+    twice = enforce_essay_output_contract(once)
+    assert twice == once
