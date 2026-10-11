@@ -443,8 +443,10 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             answer = "".join(answer_parts).strip()
             if not answer:
                 raise ValueError("Model returned an empty response")
+            _merge_tool_sources(normalized_sources, tool_sources)
+
             if is_essay:
-                issues = essay_quality_issues(answer)
+                issues = essay_quality_issues(answer, normalized_sources)
                 words_count = len(re.findall(r"\b[\w’'-]+\b", answer)) or len(answer.split())
                 logger.info(
                     "ship30_stream_quality session_id=%s first_token_streamed=true words=%d passed=%s issues=%s",
@@ -453,8 +455,6 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     not issues,
                     ",".join(issues) or "none",
                 )
-
-            _merge_tool_sources(normalized_sources, tool_sources)
 
             assistant_message = ChatMessage(
                 session_id=payload.session_id,
