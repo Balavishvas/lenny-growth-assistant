@@ -64,6 +64,7 @@ def _call_with_optional_tool_callback(
     return func(*args, **call_kwargs)
 from app.models import ChatMessage, ChatSession
 from app.retrieval import retrieve_chunks
+from app.writing_skill import apply_writing_skill
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -356,7 +357,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             yield "data: " + json.dumps({"type": "done", "sources": [], "grounded": False, "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": 0, "total_ms": round((time.perf_counter() - started) * 1000, 2), "tool_invocations": 0}) + "\n\n"
         return StreamingResponse(no_evidence_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    system_prompt = _build_system_prompt(sources)
+    system_prompt = apply_writing_skill(_build_system_prompt(sources), payload.message)
     messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
 
     tool_call_count = 0
@@ -487,7 +488,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
     if not sources:
         answer = NO_EVIDENCE_ANSWER
     else:
-        system_prompt = _build_system_prompt(sources)
+        system_prompt = apply_writing_skill(_build_system_prompt(sources), payload.message)
         try:
             generation_started = time.perf_counter()
             answer = _call_with_optional_tool_callback(
