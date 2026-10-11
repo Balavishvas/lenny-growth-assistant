@@ -59,7 +59,7 @@ def essay_quality_issues(answer: str) -> list[str]:
     if not re.search(r"\[\d+\]", text):
         issues.append("missing_citations")
     # Catch escaped heading/separator markers that show up literally in the preview.
-    if re.search(r"(?m)^\\#{1,6}\s|(?m)^\\---\s*$", text):
+    if re.search(r"(?m)^\\#{1,6}\s|^\\---\s*$", text):
         issues.append("malformed_markdown")
     return issues
 
