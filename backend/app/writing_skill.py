@@ -88,3 +88,28 @@ def build_essay_revision_messages(
         + draft
     )
     return [*messages, {"role": "user", "content": revision}]
+
+
+
+def enforce_essay_output_contract(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Place a concise, high-priority output contract directly in the final user turn."""
+    if not messages or messages[-1].get("role") != "user":
+        return messages
+    content = messages[-1].get("content", "")
+    if not is_ship30_request(content):
+        return messages
+    directive = (
+        "\n\nMANDATORY FINAL OUTPUT FORMAT — this instruction is part of the user's request:\n"
+        "Write the complete Ship 30 essay now. Do NOT summarize retrieved passages, report search "
+        "results, ask whether the user wants more detail, or describe what the sources contain. "
+        "Begin with the exact essay title, then write the full 1,100–1,400-word article in polished "
+        "Markdown with meaningful headings, an actionable takeaway section, and a conclusion. "
+        "Use only the supplied transcript evidence and its existing [number] citations. Attribute "
+        "claims to the correct speaker; distinguish evidence from analysis; never invent facts or "
+        "citations. If evidence supports only a narrow claim, write a careful essay around that "
+        "supported claim rather than reverting to a search summary. Return only the essay."
+    )
+    # Idempotent in case a caller applies the contract more than once.
+    if "MANDATORY FINAL OUTPUT FORMAT" in content:
+        return messages
+    return [*messages[:-1], {**messages[-1], "content": content + directive}]
