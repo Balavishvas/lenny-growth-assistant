@@ -41,17 +41,32 @@ def apply_writing_skill(system_prompt: str, user_message: str) -> str:
     )
 
 
+def essay_quality_issues(answer: str) -> list[str]:
+    """Return deterministic checks that can identify obviously incomplete essay drafts."""
+    text = answer.strip()
+    issues: list[str] = []
+    if not text:
+        return ["empty"]
+    if text.casefold().startswith(_SUMMARY_OPENERS):
+        issues.append("search_summary")
+    words = re.findall(r"\b[\w’'-]+\b", text)
+    has_title = bool(re.match(r"^\s{0,3}#{0,2}\s*[^\n]{8,120}\n", text))
+    if len(words) < 1000:
+        issues.append("short_draft")
+    if not has_title:
+        issues.append("missing_title")
+    # Citation syntax is a cheap proxy only; it does not prove each claim is supported.
+    if not re.search(r"\[\d+\]", text):
+        issues.append("missing_citations")
+    # Catch escaped heading/separator markers that show up literally in the preview.
+    if re.search(r"(?m)^\\#{1,6}\s|(?m)^\\---\s*$", text):
+        issues.append("malformed_markdown")
+    return issues
+
+
 def essay_needs_revision(answer: str) -> bool:
     """Detect obvious Ship 30 failures before a draft is returned to the user."""
-    text = answer.strip()
-    if not text:
-        return True
-    if text.casefold().startswith(_SUMMARY_OPENERS):
-        return True
-    words = re.findall(r"\b[\w’'-]+\b", text)
-    has_title = bool(re.match(r"^\s{0,3}#?\s*[^\n]{8,100}\n", text))
-    # A requested ~1,250-word essay below 850 words is almost always incomplete.
-    return len(words) < 850 or not has_title
+    return bool(essay_quality_issues(answer))
 
 
 def build_essay_revision_messages(
@@ -59,13 +74,17 @@ def build_essay_revision_messages(
 ) -> list[dict[str, str]]:
     """Ask the same grounded model to repair a clearly incomplete first draft."""
     revision = (
-        "QUALITY-CONTROL RETRY: The previous attempt did not satisfy the active Ship 30 for 30 "
-        "essay contract. Rewrite it as a complete, polished essay—not a summary of search results. "
-        "Target 1,100–1,400 words, start with the title, develop one coherent thesis, use useful "
-        "headings, include specific actionable takeaways, and end with a memorable conclusion. "
-        "Remove repetition and generic filler. Preserve only citations that map to the supplied "
-        "evidence, do not invent facts or guest attributions, and qualify unsupported claims. "
-        "Return only the revised essay.\n\nPrevious draft to improve:\n"
+        "QUALITY-CONTROL RETRY: The previous attempt failed one or more deterministic essay checks. "
+        "Rewrite it as a complete, polished Ship 30 for 30 essay, not a summary of search results. "
+        "Target 1,100–1,400 words. Start with a clear title, use valid Markdown headings (for example, "
+        "'## Heading' with no backslash before the hashes), develop one coherent thesis, include "
+        "specific actionable takeaways, and end with a memorable conclusion. Every material claim "
+        "about a transcript must cite its actual supplied source number like [2]. Only use citation "
+        "numbers present in the supplied evidence; never invent sources, quotes, metrics, or guest "
+        "attributions. Separate transcript-supported facts from your interpretation. Do not add "
+        "citations merely to satisfy the checker: they must support the nearby claim. Avoid generic "
+        "openers, repetition, and filler. Return only the revised essay.\n\n"
+        "Previous draft to improve:\n"
         + draft
     )
     return [*messages, {"role": "user", "content": revision}]
