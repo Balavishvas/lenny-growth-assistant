@@ -64,7 +64,12 @@ def _call_with_optional_tool_callback(
     return func(*args, **call_kwargs)
 from app.models import ChatMessage, ChatSession
 from app.retrieval import retrieve_chunks
-from app.writing_skill import (\n    apply_writing_skill,\n    build_essay_revision_messages,\n    essay_needs_revision,\n    is_ship30_request,\n)
+from app.writing_skill import (
+    apply_writing_skill,
+    build_essay_revision_messages,
+    essay_needs_revision,
+    is_ship30_request,
+)
 from app.schemas import (
     ChatRequest,
     ChatResponse,
