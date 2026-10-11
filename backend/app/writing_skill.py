@@ -110,6 +110,27 @@ def essay_quality_issues(answer: str, sources: list[dict] | None = None) -> list
     return issues
 
 
+
+def select_better_essay(original: str, revised: str, sources: list[dict] | None = None) -> tuple[str, list[str]]:
+    """Prefer fewer quality issues; break ties by closeness to 1,250 words.
+
+    Deterministic checks are warning signals, not proof of factual correctness.
+    """
+    original_issues = essay_quality_issues(original, sources)
+    if not revised.strip():
+        return original, original_issues
+    revised_issues = essay_quality_issues(revised, sources)
+    if len(revised_issues) < len(original_issues):
+        return revised, revised_issues
+    if len(revised_issues) > len(original_issues):
+        return original, original_issues
+    target_words = 1250
+    original_words = len(re.findall(r"\b[\w’'-]+\b", original))
+    revised_words = len(re.findall(r"\b[\w’'-]+\b", revised))
+    if abs(revised_words - target_words) < abs(original_words - target_words):
+        return revised, revised_issues
+    return original, original_issues
+
 def essay_needs_revision(answer: str) -> bool:
     """Detect obvious Ship 30 failures before a draft is returned to the user."""
     return bool(essay_quality_issues(answer))
