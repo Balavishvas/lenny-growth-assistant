@@ -42,7 +42,8 @@ def apply_writing_skill(system_prompt: str, user_message: str) -> str:
     return (
         system_prompt
         + "\n\n## Active writing workflow: Ship 30 for 30\n"
-        + "Follow the dedicated workflow below for this response while preserving all grounding and citation rules above.\n\n"
+        + "Follow the dedicated workflow below for this response while preserving all grounding and citation rules above.\n"
+        + "Never invent a source, citation, quotation, metric, timestamp, or speaker attribution.\n\n"
         + instructions
     )
 
@@ -133,7 +134,6 @@ def build_essay_revision_messages(
         + draft
     )
     return [*messages, {"role": "user", "content": revision}]
-
 
 
 def enforce_essay_output_contract(messages: list[dict[str, str]]) -> list[dict[str, str]]:
