@@ -512,7 +512,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
         try:
             generation_started = time.perf_counter()
             messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
-    messages = enforce_essay_output_contract(messages)
+            messages = enforce_essay_output_contract(messages)
             answer = _call_with_optional_tool_callback(
                 generate_reply,
                 messages,
