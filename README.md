@@ -22,7 +22,7 @@ A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and n
 - **Retrieval:** transcript ingestion, chunking, vector similarity search, and source attribution
 - **Frontend:** static HTML/CSS/JavaScript served by FastAPI at `/`; no Node.js build step required
 - **Artifacts:** browser-local editable Markdown/HTML drafts with sandboxed HTML preview and export
-- **Agent:** `AGENT_RUNTIME=pi` routes grounded chat through Pi Coding Agent; `AGENT_RUNTIME=ollama` retains the native Ollama adapter. Pi requires Node.js and a configured Pi CLI model provider.\n- **Ship 30 writing skill / server-side artifact persistence:** remaining milestones
+- **Agent:** `AGENT_RUNTIME=pi` routes grounded chat through Pi Coding Agent; `AGENT_RUNTIME=ollama` retains the native Ollama adapter. Pi requires Node.js and a configured Pi CLI model provider.\n- **Ship 30 for 30 writing workflow:** dedicated essay instructions are conditionally injected for explicit long-form writing requests; runtime verification is pending.
 
 ## Quick start
 
@@ -52,10 +52,13 @@ Create a session with `POST /api/v1/sessions`, then send a message to `POST /api
 ## Next milestones
 
 - [ ] Add retrieval evaluation with a fixed query/expected-source set (Recall@K, MRR, Precision@K).
-- [ ] Implement the dedicated Ship 30 for 30 writing skill and stronger artifact-generation flow.
+- [x] Add the dedicated Ship 30 for 30 writing workflow and unit tests; verify essay quality with the configured local model.
 - [ ] Add server-side artifact persistence and comprehensive frontend end-to-end tests.
 - [ ] Add provider controls, Docker Compose, handoff documentation, and demo recording.
-- [ ] Docker Compose, handoff documentation, and demo recording.
+
+## Dedicated writing workflow
+
+The Ship 30 for 30 workflow lives in `backend/app/skills/ship_30_for_30.md` and is loaded by `backend/app/writing_skill.py` for explicit essay-writing requests. It targets roughly 1,250 words, enforces a coherent narrative arc and practical takeaways, and preserves retrieval-grounding and citation rules. Tests are in `tests/test_writing_skill.py`. The integration is on the `feat/ship30-writing-workflow` branch and still needs local test/runtime verification before merge.
 
 ## Project documents
 
