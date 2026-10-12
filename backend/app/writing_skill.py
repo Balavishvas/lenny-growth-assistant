@@ -154,7 +154,7 @@ def build_essay_revision_messages(
         "thesis_contradiction": "Make the body consistent with the requested thesis; do not argue the opposite of the title.",
         "malformed_markdown": "Use valid Markdown headings and remove literal backslashes before heading markers.",
     }
-    targeted_fixes = "\\n".join(
+    targeted_fixes = "\n".join(
         f"- {issue}: {issue_guidance.get(issue, 'Fix this detected quality issue without inventing facts or sources.')}"
         for issue in issue_list
     ) or "- Improve clarity, evidence use, completeness, and structure while preserving factual grounding."
@@ -172,23 +172,23 @@ def build_essay_revision_messages(
         if guest:
             header += f" — guest: {guest}"
         if url:
-            header += f"\\nSource URL: {url}"
-        evidence_blocks.append(f"{header}\\nPassage: {content[:5000]}")
+            header += f"\nSource URL: {url}"
+        evidence_blocks.append(f"{header}\nPassage: {content[:5000]}")
     evidence_section = (
-        "\\n\\nRetrieved evidence available for revision (keep these original citation indexes):\\n"
-        + "\\n\\n".join(evidence_blocks)
+        "\n\nRetrieved evidence available for revision (keep these original citation indexes):\n"
+        + "\n\n".join(evidence_blocks)
         if evidence_blocks else
-        "\\n\\nUse only the retrieved evidence already present in the conversation. If it does not support a claim, narrow or omit that claim."
+        "\n\nUse only the retrieved evidence already present in the conversation. If it does not support a claim, narrow or omit that claim."
     )
     revision = (
-        "QUALITY-CONTROL RETRY: The previous draft failed these checks:\\n"
+        "QUALITY-CONTROL RETRY: The previous draft failed these checks:\n"
         + targeted_fixes
-        + "\\n\\nRewrite the draft as a complete, polished Ship 30 for 30 essay. Target 1,300–1,400 words, "
+        + "\n\nRewrite the draft as a complete, polished Ship 30 for 30 essay. Target 1,300–1,400 words, "
         "with a specific thesis, 4–6 meaningful sections, concrete reasoning, trade-offs, and 3–5 useful takeaways. "
         "Do not add filler or repeat the same point to hit length. Every material factual claim about a transcript "
         "must cite the existing source number (for example [1]); never invent citations, sources, quotations, metrics, "
-        "or speaker attributions. Prefer paraphrase over an uncertain direct quote. Return only the finished essay.\\n\\n"
-        "Previous draft to improve:\\n"
+        "or speaker attributions. Prefer paraphrase over an uncertain direct quote. Return only the finished essay.\n\n"
+        "Previous draft to improve:\n"
         + draft
         + evidence_section
     )
