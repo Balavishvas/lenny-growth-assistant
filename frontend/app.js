@@ -16,7 +16,7 @@
     settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle"), modelStatus: $("#modelStatus")
   };
   const state = {
-    sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "",
+    sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "", provider: "ollama", claudeModel: "claude-sonnet-4-20250514",
     view: "chat", artifactTab: "markdown", artifactTitle: "Untitled growth brief",
     artifactContent: "", busy: false, toastTimer: null, artifactPreviewTimer: null, abortController: null
   };
@@ -241,7 +241,7 @@
       const response = await fetch(API + "/api/v1/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
-        body: JSON.stringify({ session_id: state.sessionId, message })
+        body: JSON.stringify({ session_id: state.sessionId, message, provider: state.provider, model: state.provider === "anthropic" ? state.claudeModel : null, api_key: state.provider === "anthropic" ? getClaudeKey() : null })
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -294,9 +294,7 @@
       };
       state.lastAnswer = finalMessage.content;
       renderMessages(); renderSources(completion?.sources || [], Boolean(completion?.grounded));
-      if (finalMessage.metadata.quality_issues.length) {
-        showToast("Essay quality checks flagged: " + finalMessage.metadata.quality_issues.join(", ").replaceAll("_", " ") + ". Review the draft before using it.");
-      }
+      // Quality flags remain attached to the message for review/export, but do not interrupt the workspace with a prominent warning.
       const session = state.sessions.find((item) => item.id === state.sessionId) || { id: state.sessionId, created_at: new Date().toISOString() };
       upsertSession({ ...session, title: session.title === "New conversation" || !session.title ? shortTitle(message) : session.title, updated_at: new Date().toISOString() });
       if (completion) {
@@ -442,6 +440,30 @@
   function toggleTheme() {
     applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
   }
+  function getClaudeKey() {
+    try { return sessionStorage.getItem("lenny-growth-assistant.anthropic-key") || ""; }
+    catch { return ""; }
+  }
+  function setProvider(provider) {
+    state.provider = provider === "anthropic" ? "anthropic" : "ollama";
+    const mode = $("#modelMode");
+    if (mode) mode.value = state.provider;
+    if (state.provider === "anthropic" && !getClaudeKey()) {
+      const key = window.prompt("Enter your Anthropic API key. It stays in this browser tab and is sent only with Claude requests.");
+      if (key && key.trim()) {
+        try { sessionStorage.setItem("lenny-growth-assistant.anthropic-key", key.trim()); }
+        catch { showToast("This browser cannot store the key for this tab."); }
+      } else {
+        state.provider = "ollama";
+        if (mode) mode.value = "ollama";
+        showToast("Kept local Ollama selected; Claude needs an API key.");
+      }
+    }
+    if (els.modelStatus) els.modelStatus.innerHTML = state.provider === "anthropic"
+      ? '<i class="status-dot"></i> Claude · API'
+      : '<i class="status-dot"></i> Local Ollama';
+    persist();
+  }
   async function loadModelStatus() {
     if (!els.modelStatus) return;
     try {
@@ -509,6 +531,7 @@
   els.openSidebar.addEventListener("click", () => els.sidebar.classList.add("open"));
   els.closeSidebar.addEventListener("click", () => els.sidebar.classList.remove("open"));
   els.settingsButton.addEventListener("click", showSettings);
+  $("#modelMode")?.addEventListener("change", (event) => setProvider(event.target.value));
   els.themeToggle.addEventListener("click", toggleTheme);
   els.createArtifact.addEventListener("click", () => {
     const latest = [...state.messages].reverse().find((message) => message.role === "assistant");
@@ -539,6 +562,8 @@
 
   async function init() {
     loadPersisted();
+    try { if (sessionStorage.getItem("lenny-growth-assistant.provider") === "anthropic" && getClaudeKey()) state.provider = "anthropic"; } catch { /* Default to local mode. */ }
+    if ($("#modelMode")) $("#modelMode").value = state.provider;
     loadModelStatus();
     let savedTheme = "light";
     try { savedTheme = localStorage.getItem(THEME_KEY) || "light"; } catch { /* Use light theme by default. */ }
