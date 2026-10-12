@@ -15,6 +15,28 @@ export default function registerLennyTools(pi: ExtensionAPI) {
   }
   let nextSourceIndex = parseInt(process.env.LENNY_SOURCE_OFFSET || "0", 10) + 1;
 
+  if (typeof pi.on === "function") {
+    pi.on("before_provider_request", (event: any) => {
+      const raw = event?.payload;
+      if (raw && typeof raw === "object") {
+        const numPredict = parseInt(process.env.LENNY_NUM_PREDICT || "0", 10);
+        const numCtx = parseInt(process.env.LENNY_NUM_CTX || "0", 10);
+        if (numPredict > 0 || numCtx > 0) {
+          raw.options = raw.options || {};
+          if (numPredict > 0) {
+            raw.options.num_predict = numPredict;
+            raw.max_completion_tokens = numPredict;
+            raw.max_tokens = numPredict;
+          }
+          if (numCtx > 0) {
+            raw.options.num_ctx = numCtx;
+          }
+        }
+      }
+      return raw;
+    });
+  }
+
   pi.registerTool({
     name: "search_lenny_transcripts",
     label: "Search Lenny transcripts",

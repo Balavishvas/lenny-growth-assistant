@@ -52,3 +52,157 @@
 .welcome-view{overflow:visible}
 @media(min-width:761px){.workspace-grid{min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}.chat-column{overflow:visible;min-height:100%}.welcome-view{flex:none}.messages-list{flex:none;overflow:visible}.composer-wrap{position:sticky;bottom:0;margin-top:auto;flex:none;padding-top:20px;background:linear-gradient(0deg,var(--paper-2) 82%,rgba(255,254,250,0))}.evidence-content{scrollbar-gutter:stable}.workspace-grid.evidence-hidden{overflow-y:auto}}
 @media(max-width:760px){.theme-toggle{font-size:0;padding:0 8px}.theme-label{display:none}.theme-glyph{font-size:16px}.welcome-view{overflow:visible}}
+
+
+/* Final polish: balanced dark evidence panel, subtle editorial color atmosphere, and model control. */
+:root {
+  --glow-blue: rgba(111, 145, 255, .13);
+  --glow-peach: rgba(255, 183, 157, .10);
+}
+.app-shell {
+  background:
+    radial-gradient(ellipse at 14% 0%, var(--glow-blue), transparent 38%),
+    radial-gradient(ellipse at 78% 8%, var(--glow-peach), transparent 34%),
+    var(--paper);
+}
+.main-panel, .chat-column {
+  background-color: transparent;
+}
+.workspace-grid, .artifact-view {
+  background:
+    radial-gradient(ellipse at 15% 0%, var(--glow-blue), transparent 45%),
+    radial-gradient(ellipse at 88% 4%, var(--glow-peach), transparent 40%),
+    var(--paper-2);
+}
+.evidence-panel {
+  background: var(--paper);
+  color: var(--ink);
+  border-left: 1px solid var(--line);
+}
+.evidence-panel .panel-heading,
+.evidence-panel .evidence-footer {
+  background: transparent;
+}
+.evidence-panel .grounding-status,
+.evidence-panel .source-card {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.evidence-panel .source-title,
+.evidence-panel .grounding-status strong {
+  color: var(--ink);
+}
+.evidence-panel .source-excerpt,
+.evidence-panel .source-guest,
+.evidence-panel .grounding-status span:not(.status-symbol) {
+  color: var(--muted);
+}
+:root[data-theme="dark"] .app-shell {
+  --glow-blue: rgba(93, 119, 255, .16);
+  --glow-peach: rgba(229, 142, 119, .09);
+}
+:root[data-theme="dark"] .main-panel,
+:root[data-theme="dark"] .chat-column {
+  background-color: transparent;
+}
+:root[data-theme="dark"] .workspace-grid,
+:root[data-theme="dark"] .artifact-view {
+  background:
+    radial-gradient(ellipse at 12% 0%, var(--glow-blue), transparent 46%),
+    radial-gradient(ellipse at 84% 0%, var(--glow-peach), transparent 38%),
+    var(--paper-2);
+}
+:root[data-theme="dark"] .evidence-panel {
+  background:
+    radial-gradient(ellipse at 80% 0%, rgba(111, 145, 255, .10), transparent 45%),
+    var(--paper);
+  color: var(--ink);
+}
+.model-mode-label {
+  font: 8px var(--mono);
+  letter-spacing: .7px;
+  color: var(--muted);
+}
+.model-mode {
+  max-width: 142px;
+  height: 31px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 10px var(--sans);
+}
+.model-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media(max-width:760px) {
+  .model-mode-label { display: none; }
+  .model-mode { max-width: 104px; font-size: 9px; padding: 0 4px; }
+}
+/* Keep the chat clean; quality findings remain available in response metadata/logs. */
+.quality-warning, .quality-warning-banner, .quality-alert-banner, [data-quality-warning] { display: none !important; }
+
+
+/* Dedicated Ship30 writing action */
+.ship30-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid rgba(117, 137, 225, .55);
+  border-radius: 4px;
+  background: linear-gradient(115deg, rgba(113, 143, 255, .18), rgba(255, 183, 157, .22));
+  color: var(--ink);
+  font: 600 10px var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .18s ease, transform .18s ease, background .18s ease;
+}
+.ship30-button:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  background: linear-gradient(115deg, rgba(113, 143, 255, .27), rgba(255, 183, 157, .3));
+}
+.ship30-button:disabled { opacity: .55; cursor: wait; transform: none; }
+@media(max-width:760px) {
+  .ship30-button { font-size: 9px; padding: 0 7px; }
+}
+
+
+/* Ship30 in-app essay topic composer */
+.ship30-composer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 19, 31, .52);
+  backdrop-filter: blur(7px);
+}
+.ship30-composer {
+  width: min(520px, 100%);
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(255, 183, 157, .15), transparent 42%),
+    radial-gradient(ellipse at 0% 0%, rgba(111, 145, 255, .15), transparent 45%),
+    var(--paper-2);
+  color: var(--ink);
+  box-shadow: 0 24px 80px rgba(0,0,0,.22);
+}
+.ship30-composer-kicker { font: 9px var(--mono); letter-spacing: 1.2px; color: var(--accent); }
+.ship30-composer h2 { margin: 14px 0 8px; font: 30px/1.1 var(--display); font-weight: 400; }
+.ship30-composer p { margin: 0 0 22px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.ship30-composer label { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 700; }
+.ship30-composer textarea {
+  display: block; width: 100%; min-height: 110px; resize: vertical; padding: 12px;
+  border: 1px solid var(--line-strong); border-radius: 5px; outline: none;
+  background: var(--paper); color: var(--ink); font: 12px/1.7 var(--sans);
+}
+.ship30-composer textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(111,145,255,.12); }
+.ship30-composer-hint { margin-top: 10px; color: var(--muted); font-size: 10px; }
+.ship30-composer-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+@media(max-width:520px) { .ship30-composer { padding: 21px; } .ship30-composer h2 { font-size: 26px; } }

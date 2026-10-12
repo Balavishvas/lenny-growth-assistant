@@ -55,11 +55,15 @@ def _pi_extra_args() -> list[str]:
     ]
 
 
-def _pi_env(existing_sources: list[dict] | None = None) -> dict[str, str]:
+def _pi_env(existing_sources: list[dict] | None = None, num_predict: int | None = None, num_ctx: int | None = None) -> dict[str, str]:
     """Ensure the custom extension knows the API URL and existing source citation indices."""
     env = dict(os.environ)
     if "LENNY_API_BASE_URL" not in env:
         env["LENNY_API_BASE_URL"] = "http://127.0.0.1:8000"
+    if num_predict is not None:
+        env["LENNY_NUM_PREDICT"] = str(num_predict)
+    if num_ctx is not None:
+        env["LENNY_NUM_CTX"] = str(num_ctx)
     if existing_sources:
         mapping = {str(s["chunk_id"]): i + 1 for i, s in enumerate(existing_sources) if "chunk_id" in s}
         env["LENNY_EXISTING_SOURCES"] = json.dumps(mapping)
@@ -74,13 +78,20 @@ def generate_agent_reply(
     messages: list[dict[str, str]],
     on_tool_call: Callable[[str, dict, list[dict]], None] | None = None,
     initial_sources: list[dict] | None = None,
+    num_predict: int | None = None,
+    num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> str:
-    """Use Pi Coding Agent when selected; retain native Ollama as a fallback."""
+    """Use request-selected Claude directly, or the configured local runtime."""
     settings = get_settings()
+    if (provider or settings.llm_provider).lower().strip() == "anthropic":
+        return generate_reply(messages, num_predict=num_predict, num_ctx=num_ctx, provider="anthropic", api_key=api_key, model=model)
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
-        return generate_reply(messages)
+        return generate_reply(messages, num_predict=num_predict, **({"num_ctx": num_ctx} if num_ctx is not None else {}))
     if runtime != "pi":
         raise RuntimeError(f"Unsupported agent runtime: {runtime}")
 
@@ -100,7 +111,7 @@ def generate_agent_reply(
             model=settings.ollama_model,
             no_session=True,
             extra_args=_pi_extra_args(),
-            env=_pi_env(initial_sources),
+            env=_pi_env(initial_sources, num_predict=num_predict, num_ctx=num_ctx),
         ) as pi:
             answer_parts = []
             active_tool_calls: dict[str, dict] = {}
@@ -153,13 +164,21 @@ def stream_agent_reply(
     messages: list[dict[str, str]],
     on_tool_call: Callable[[str, dict, list[dict]], None] | None = None,
     initial_sources: list[dict] | None = None,
+    num_predict: int | None = None,
+    num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> Iterator[str]:
-    """Stream output from the selected runtime while preserving the SSE token contract."""
+    """Stream request-selected Claude or the configured local runtime."""
     settings = get_settings()
+    if (provider or settings.llm_provider).lower().strip() == "anthropic":
+        yield from stream_reply(messages, num_predict=num_predict, num_ctx=num_ctx, provider="anthropic", api_key=api_key, model=model)
+        return
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s streaming=true", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
-        yield from stream_reply(messages)
+        yield from stream_reply(messages, num_predict=num_predict, **({"num_ctx": num_ctx} if num_ctx is not None else {}))
         return
     if runtime != "pi":
         raise RuntimeError(f"Unsupported agent runtime: {runtime}")
@@ -180,7 +199,7 @@ def stream_agent_reply(
             model=settings.ollama_model,
             no_session=True,
             extra_args=_pi_extra_args(),
-            env=_pi_env(initial_sources),
+            env=_pi_env(initial_sources, num_predict=num_predict, num_ctx=num_ctx),
         ) as pi:
             active_tool_calls: dict[str, dict] = {}
             with pi.stream(_to_prompt(messages)) as stream:

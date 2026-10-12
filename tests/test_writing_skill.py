@@ -1,0 +1,226 @@
+"""Tests for the dedicated Ship 30 for 30 writing workflow."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+
+from app.writing_skill import (  # noqa: E402
+    apply_writing_skill,
+    build_essay_revision_messages,
+    essay_needs_revision,
+    essay_quality_issues,
+    enforce_essay_output_contract,
+    is_ship30_request,
+    select_better_essay,
+)
+
+
+def test_ship30_trigger_phrases_are_case_and_whitespace_insensitive():
+    assert is_ship30_request("Please write a Ship 30 for 30 essay")
+    assert is_ship30_request("Can you WRITE AN ESSAY about product-market fit?")
+    assert is_ship30_request("Draft a 1,250 word essay")
+    assert is_ship30_request("  long-form   essay  ")
+    assert is_ship30_request("Ship30 essay on PMF")
+    assert is_ship30_request("Write a Ship-30 essay")
+    assert is_ship30_request("Draft a 1250-word essay")
+    assert is_ship30_request("Draft a 1,250-word essay")
+    assert is_ship30_request("Write a 1,100 word essay")
+    assert is_ship30_request("Draft a 1,400-word essay")
+    assert is_ship30_request("30for30 essay")
+
+
+def test_regular_research_question_does_not_activate_writing_skill():
+    assert not is_ship30_request("What is product-market fit?")
+    base = "Ground answers in retrieved evidence."
+    assert apply_writing_skill(base, "What is product-market fit?") == base
+
+
+def test_writing_skill_is_injected_and_preserves_grounding_rules():
+    base = "Ground answers in retrieved evidence."
+    result = apply_writing_skill(base, "Write an essay about finding product-market fit")
+    assert result.startswith(base)
+    assert "Active writing workflow: Ship 30 for 30" in result
+    assert "Never invent a source" in result
+    assert "approximately 1,250 words" in result or "1,100–1,400 words" in result
+    assert "finished essay itself" in result
+    assert "not a search report" in result
+
+
+def test_short_search_summary_is_flagged_for_revision():
+    summary = (
+        "The search for the passages related to your query has been successful. "
+        "Here are the findings. Rahul Vohra says to focus on product market fit."
+    )
+    assert essay_needs_revision(summary)
+    assert "search_summary" in essay_quality_issues(summary)
+
+
+def test_short_essay_is_flagged_for_revision():
+    short = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Some text. " * 80)
+    assert essay_needs_revision(short)
+
+
+def test_long_title_led_essay_without_citations_is_flagged():
+    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph text. " * 500)
+    assert "missing_citations" in essay_quality_issues(long)
+    assert essay_needs_revision(long)
+
+
+def test_complete_cited_essay_passes_deterministic_checks():
+    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph with evidence [6]. " * 350)
+    assert essay_quality_issues(long) == []
+    assert not essay_needs_revision(long)
+
+
+def test_escaped_markdown_heading_is_flagged():
+    long = "# Product-Market Fit Is Not an Activation Problem\n\n" + ("Useful paragraph with evidence [6]. " * 350)
+    malformed = long + "\n\\#### Broken heading\n"
+    assert "malformed_markdown" in essay_quality_issues(malformed)
+
+
+def test_revision_prompt_preserves_context_and_demands_complete_essay():
+    messages = [{"role": "system", "content": "Use grounded citations."}, {"role": "user", "content": "Write an essay."}]
+    revised = build_essay_revision_messages(messages, "A short first draft.")
+    assert revised[:2] == messages
+    assert revised[-1]["role"] == "user"
+    assert "not a summary of search results" in revised[-1]["content"]
+    assert "1,100–1,400 words" in revised[-1]["content"]
+    assert "citation" in revised[-1]["content"]
+    assert "A short first draft." in revised[-1]["content"]
+
+
+def test_missing_skill_file_does_not_break_chat(monkeypatch):
+    import app.writing_skill as module
+
+    monkeypatch.setattr(module, "_SKILL_PATH", Path("missing-ship30-skill.md"))
+    base = "Ground answers in retrieved evidence."
+    assert apply_writing_skill(base, "Write an essay") == base
+
+
+
+def test_output_contract_is_appended_to_ship30_user_turn():
+    messages = [
+        {"role": "system", "content": "Ground claims in sources."},
+        {"role": "user", "content": "Write a Ship 30 for 30 essay about product-market fit."},
+    ]
+    result = enforce_essay_output_contract(messages)
+    assert result[0] == messages[0]
+    assert result[-1]["role"] == "user"
+    assert "MANDATORY FINAL OUTPUT FORMAT" in result[-1]["content"]
+    assert "Do NOT summarize retrieved passages" in result[-1]["content"]
+    assert "1,100–1,400-word article" in result[-1]["content"]
+
+
+def test_output_contract_does_not_change_regular_chat():
+    messages = [{"role": "user", "content": "What did Rahul Vohra say about activation?"}]
+    assert enforce_essay_output_contract(messages) == messages
+
+
+def test_output_contract_is_idempotent():
+    messages = [{"role": "user", "content": "Write an essay of 1,250 words."}]
+    once = enforce_essay_output_contract(messages)
+    twice = enforce_essay_output_contract(once)
+    assert twice == once
+
+
+
+def test_thesis_contradiction_is_flagged_for_activation_opposite_title():
+    essay = (
+        "# Product-Market Fit Is Not an Activation Problem\n\n"
+        "The primary focus should shift from product-market fit to activation. "
+        + ("A supporting paragraph with evidence [1]. " * 320)
+    )
+    assert "thesis_contradiction" in essay_quality_issues(essay)
+
+
+def test_citations_outside_retrieved_source_range_are_flagged():
+    essay = (
+        "# Evidence-Led Product Strategy\n\n"
+        + ("A supported claim follows from the interview [1]. " * 320)
+        + " An invented citation appears here [7]."
+    )
+    sources = [{"content": "A supported claim follows from the interview."}]
+    assert "citation_out_of_range" in essay_quality_issues(essay, sources)
+
+
+def test_unverified_long_direct_quote_is_flagged():
+    essay = (
+        "# Evidence-Led Product Strategy\n\n"
+        + ("Useful analysis supported by the retrieved passage [1]. " * 320)
+        + ' The guest said, "Activation automatically happens when every product has achieved perfect market fit through continuous iteration." [1]'
+    )
+    sources = [{"content": "The passage discusses product research and customer interviews."}]
+    assert "unverified_direct_quote" in essay_quality_issues(essay, sources)
+
+
+def test_exact_quote_present_in_source_is_not_flagged():
+    quote = "Strong products solve a frequent and important user problem"
+    essay = (
+        "# Evidence-Led Product Strategy\n\n"
+        + ("Useful analysis supported by the retrieved passage [1]. " * 320)
+        + f' The transcript says, "{quote}." [1]'
+    )
+    sources = [{"content": quote}]
+    assert "unverified_direct_quote" not in essay_quality_issues(essay, sources)
+
+
+
+def test_select_better_essay_keeps_original_when_revision_is_shorter_and_worse():
+    original = (
+        "# Product-Market Fit Is Not an Activation Problem\n\n"
+        + ("A supported paragraph about product strategy [1]. " * 350)
+    )
+    revised = "# Product-Market Fit Is Not an Activation Problem\n\nA short draft."
+    sources = [{"content": "Product strategy and market fit."}]
+
+    selected, issues = select_better_essay(original, revised, sources)
+
+    assert selected == original
+    assert issues == essay_quality_issues(original, sources)
+
+
+def test_select_better_essay_rejects_empty_revision():
+    original = "# Evidence-Led Product Strategy\n\nA usable draft."
+
+    selected, issues = select_better_essay(original, "   ")
+
+    assert selected == original
+    assert issues == essay_quality_issues(original, None)
+
+
+def test_revision_prompt_targets_word_count_and_repairs_detected_issues_with_sources():
+    messages = [
+        {"role": "system", "content": "Use retrieved evidence."},
+        {"role": "user", "content": "Write a Ship 30 for 30 essay about PMF."},
+    ]
+    sources = [{
+        "title": "Finding Product-Market Fit",
+        "guest": "Rahul Vohra",
+        "url": "https://example.com/episode",
+        "content": "A team should ask users how they would feel if they could no longer use the product.",
+    }]
+
+    revised = build_essay_revision_messages(
+        messages,
+        "# Product-Market Fit\\n\\nA short draft.",
+        issues=["short_draft", "missing_citations"],
+        sources=sources,
+    )
+
+    prompt = revised[-1]["content"]
+    assert "1,300–1,400 words" in prompt
+    assert "Expand the essay substantially" in prompt
+    assert "Add inline bracket citations" in prompt
+    assert "[1] Finding Product-Market Fit" in prompt
+    assert "Rahul Vohra" in prompt
+    assert sources[0]["content"] in prompt
+    assert "SOURCE-FIRST REVISION RULES" in prompt
+    assert "Every substantive paragraph" in prompt
+    assert prompt.index("[1] Finding Product-Market Fit") < prompt.index("Previous draft to improve")
+    assert revised[:2] == messages
+
+
+def test_essay_under_1100_words_triggers_revision_for_long_form_target():
+    draft = "# Product-Market Fit\n\n" + ("A grounded claim with evidence [1]. " * 150)
+    assert len(draft.split()) < 1100
+    assert "short_draft" in essay_quality_issues(draft)

@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 import inspect
 import json
+import re
 from collections.abc import Callable, Generator
 from pathlib import Path
 import logging
@@ -27,18 +28,46 @@ def generate_reply(
     messages: list[dict[str, str]],
     on_tool_call: Callable | None = None,
     initial_sources: list[dict] | None = None,
+    num_predict: int | None = None,
+    num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> str:
     """Compatibility seam for existing tests and callers."""
-    return generate_agent_reply(messages, on_tool_call=on_tool_call, initial_sources=initial_sources)
+    return generate_agent_reply(
+        messages,
+        on_tool_call=on_tool_call,
+        initial_sources=initial_sources,
+        num_predict=num_predict,
+        num_ctx=num_ctx,
+        provider=provider,
+        api_key=api_key,
+        model=model,
+    )
 
 
 def stream_reply(
     messages: list[dict[str, str]],
     on_tool_call: Callable | None = None,
     initial_sources: list[dict] | None = None,
+    num_predict: int | None = None,
+    num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> Generator[str, None, None]:
     """Compatibility seam for existing streaming tests and callers."""
-    yield from stream_agent_reply(messages, on_tool_call=on_tool_call, initial_sources=initial_sources)
+    yield from stream_agent_reply(
+        messages,
+        on_tool_call=on_tool_call,
+        initial_sources=initial_sources,
+        num_predict=num_predict,
+        num_ctx=num_ctx,
+        provider=provider,
+        api_key=api_key,
+        model=model,
+    )
 
 
 def _call_with_optional_tool_callback(
@@ -46,9 +75,11 @@ def _call_with_optional_tool_callback(
     *args,
     on_tool_call=None,
     initial_sources=None,
+    num_predict=None,
+    num_ctx=None,
     **kwargs,
 ):
-    """Invoke callable passing optional callback and initial sources only if accepted by signature or kwargs."""
+    """Invoke callable passing optional callback, initial sources, and token budget only if accepted by signature or kwargs."""
     call_kwargs = dict(kwargs)
     try:
         sig = inspect.signature(func)
@@ -58,12 +89,28 @@ def _call_with_optional_tool_callback(
             call_kwargs["on_tool_call"] = on_tool_call
         if initial_sources is not None and ("initial_sources" in params or has_var_kw):
             call_kwargs["initial_sources"] = initial_sources
+        if num_predict is not None and ("num_predict" in params or has_var_kw):
+            call_kwargs["num_predict"] = num_predict
+        if num_ctx is not None and ("num_ctx" in params or has_var_kw):
+            call_kwargs["num_ctx"] = num_ctx
+        for optional_name in ("provider", "api_key", "model"):
+            if optional_name not in params and not has_var_kw:
+                call_kwargs.pop(optional_name, None)
     except (ValueError, TypeError):
         pass
 
     return func(*args, **call_kwargs)
 from app.models import ChatMessage, ChatSession
 from app.retrieval import retrieve_chunks
+from app.writing_skill import (
+    apply_writing_skill,
+    enforce_essay_output_contract,
+    build_essay_revision_messages,
+    essay_needs_revision,
+    essay_quality_issues,
+    select_better_essay,
+    is_ship30_request,
+)
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -77,6 +124,25 @@ from app.schemas import (
 )
 
 settings = get_settings()
+
+
+def setup_logging() -> None:
+    """Ensure application loggers (lenny.*) are configured and visible in Uvicorn and standard environments."""
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    handlers = logging.getLogger("uvicorn").handlers or logging.getLogger("uvicorn.error").handlers
+    if handlers:
+        for handler in handlers:
+            if handler not in logging.root.handlers:
+                logging.root.addHandler(handler)
+        logging.root.setLevel(level)
+    elif not logging.root.handlers:
+        logging.basicConfig(level=level, format="%(levelname)s:     %(message)s")
+    else:
+        logging.root.setLevel(level)
+    logging.getLogger("lenny").setLevel(level)
+
+
+setup_logging()
 logger = logging.getLogger("lenny.latency")
 NO_EVIDENCE_ANSWER = (
     "I couldn't find enough relevant evidence in the indexed Lenny content to answer that "
@@ -87,7 +153,8 @@ NO_EVIDENCE_ANSWER = (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Ensure pgvector exists before creating the application's tables."""
+    """Ensure logging is configured and pgvector exists before creating the application's tables."""
+    setup_logging()
     with engine.begin() as connection:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(bind=engine)
@@ -353,11 +420,16 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             session.updated_at = models.utc_now()
             db.commit()
             yield "data: " + json.dumps({"type": "token", "text": answer}) + "\n\n"
-            yield "data: " + json.dumps({"type": "done", "sources": [], "grounded": False, "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": 0, "total_ms": round((time.perf_counter() - started) * 1000, 2), "tool_invocations": 0}) + "\n\n"
+            yield "data: " + json.dumps({"type": "done", "sources": [], "grounded": False, "provider": payload.provider, "model": payload.model or (settings.ollama_model if payload.provider == "ollama" else "claude-sonnet-4-20250514"), "retrieval_ms": retrieval_ms, "generation_ms": 0, "total_ms": round((time.perf_counter() - started) * 1000, 2), "tool_invocations": 0}) + "\n\n"
         return StreamingResponse(no_evidence_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    system_prompt = _build_system_prompt(sources)
+    system_prompt = apply_writing_skill(_build_system_prompt(sources), payload.message)
     messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
+    messages = enforce_essay_output_contract(messages)
+
+    is_essay = is_ship30_request(payload.message)
+    token_budget = settings.llm_essay_num_predict if is_essay else settings.llm_num_predict
+    context_budget = settings.llm_essay_num_ctx if is_essay else None
 
     tool_call_count = 0
     tool_sources: list[dict] = []
@@ -376,29 +448,101 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             tool_sources.append(item)
 
     def events():
-        answer_parts = []
+        answer_parts: list[str] = []
+        quality_issues: list[str] = []
         generation_started = time.perf_counter()
         try:
-            stream_iter = _call_with_optional_tool_callback(
-                stream_reply,
-                messages,
-                on_tool_call=handle_tool_call,
-                initial_sources=normalized_sources,
-            )
-            for token in stream_iter:
-                answer_parts.append(token)
-                yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
-            answer = "".join(answer_parts).strip()
-            if not answer:
-                raise ValueError("Model returned an empty response")
+            if is_essay:
+                # Buffer essays until quality checks and one possible revision finish.
+                # This prevents showing a short first draft and then duplicating it with a retry.
+                first_tokens = list(_call_with_optional_tool_callback(
+                    stream_reply,
+                    messages,
+                    on_tool_call=handle_tool_call,
+                    initial_sources=normalized_sources,
+                    num_predict=token_budget,
+                    num_ctx=context_budget,
+                    provider=payload.provider, api_key=payload.api_key, model=payload.model,
+                ))
+                initial_answer = "".join(first_tokens).strip()
+                if not initial_answer:
+                    raise ValueError("Model returned an empty response")
+                _merge_tool_sources(normalized_sources, tool_sources)
+                initial_issues = essay_quality_issues(initial_answer, normalized_sources)
+                answer = initial_answer
+                quality_issues = initial_issues
 
-            _merge_tool_sources(normalized_sources, tool_sources)
+                if initial_issues:
+                    logger.warning(
+                        "ship30_stream_retry session_id=%s initial_words=%d issues=%s",
+                        payload.session_id,
+                        len(re.findall(r"\b[\w’'-]+\b", initial_answer)),
+                        ",".join(initial_issues),
+                    )
+                    revised_answer = _call_with_optional_tool_callback(
+                        generate_reply,
+                        build_essay_revision_messages(
+                            messages,
+                            initial_answer,
+                            issues=initial_issues,
+                            sources=normalized_sources,
+                        ),
+                        on_tool_call=handle_tool_call,
+                        initial_sources=normalized_sources,
+                        num_predict=token_budget,
+                        num_ctx=context_budget,
+                        provider=payload.provider, api_key=payload.api_key, model=payload.model,
+                    ).strip()
+                    _merge_tool_sources(normalized_sources, tool_sources)
+                    answer, quality_issues = select_better_essay(
+                        initial_answer, revised_answer, normalized_sources
+                    )
+                    logger.info(
+                        "ship30_draft_selection session_id=%s original_words=%d revised_words=%d selected_words=%d issues=%s",
+                        payload.session_id,
+                        len(re.findall(r"\b[\w’'-]+\b", initial_answer)),
+                        len(re.findall(r"\b[\w’'-]+\b", revised_answer)),
+                        len(re.findall(r"\b[\w’'-]+\b", answer)),
+                        ",".join(quality_issues) or "none",
+                    )
+
+                # Only the selected, quality-checked draft is sent to the client.
+                chunk_size = 64
+                for index in range(0, len(answer), chunk_size):
+                    token = answer[index:index + chunk_size]
+                    answer_parts.append(token)
+                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
+                words_count = len(re.findall(r"\b[\w’'-]+\b", answer)) or len(answer.split())
+                logger.info(
+                    "ship30_stream_quality session_id=%s first_token_streamed=true words=%d passed=%s issues=%s",
+                    payload.session_id,
+                    words_count,
+                    not quality_issues,
+                    ",".join(quality_issues) or "none",
+                )
+            else:
+                stream_iter = _call_with_optional_tool_callback(
+                    stream_reply,
+                    messages,
+                    on_tool_call=handle_tool_call,
+                    initial_sources=normalized_sources,
+                    num_predict=token_budget,
+                    num_ctx=context_budget,
+                    provider=payload.provider, api_key=payload.api_key, model=payload.model,
+                )
+                for token in stream_iter:
+                    answer_parts.append(token)
+                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
+                answer = "".join(answer_parts).strip()
+                if not answer:
+                    raise ValueError("Model returned an empty response")
+                _merge_tool_sources(normalized_sources, tool_sources)
 
             assistant_message = ChatMessage(
                 session_id=payload.session_id,
                 role="assistant",
                 content=answer,
-                message_metadata={"provider": settings.llm_provider, "model": settings.ollama_model, "sources": normalized_sources, "grounded": bool(normalized_sources), "tool_invocations": tool_call_count},
+                message_metadata={"provider": payload.provider, "model": payload.model or (settings.ollama_model if payload.provider == "ollama" else "claude-sonnet-4-20250514"), "sources": normalized_sources, "grounded": bool(normalized_sources), "tool_invocations": tool_call_count, "quality_issues": quality_issues},
             )
             db.add(assistant_message)
             session.updated_at = models.utc_now()
@@ -407,7 +551,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             total_ms = round((time.perf_counter() - started) * 1000, 2)
             logger.info("chat_stream_latency session_id=%s retrieval_ms=%.2f generation_ms=%.2f total_ms=%.2f sources=%d tool_invocations=%d", payload.session_id, retrieval_ms, generation_ms, total_ms, len(normalized_sources), tool_call_count)
-            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count}) + "\n\n"
+            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count, "quality_issues": quality_issues}) + "\n\n"
         except Exception:
             db.rollback()
             logger.exception("chat_stream_failed session_id=%s", payload.session_id)
@@ -487,15 +631,52 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
     if not sources:
         answer = NO_EVIDENCE_ANSWER
     else:
-        system_prompt = _build_system_prompt(sources)
+        system_prompt = apply_writing_skill(_build_system_prompt(sources), payload.message)
         try:
             generation_started = time.perf_counter()
+            messages = [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}]
+            messages = enforce_essay_output_contract(messages)
+            is_essay = is_ship30_request(payload.message)
+            token_budget = settings.llm_essay_num_predict if is_essay else settings.llm_num_predict
+            context_budget = settings.llm_essay_num_ctx if is_essay else None
             answer = _call_with_optional_tool_callback(
                 generate_reply,
-                [{"role": "system", "content": system_prompt}, *conversation, {"role": "user", "content": payload.message}],
+                messages,
                 on_tool_call=handle_tool_call,
                 initial_sources=normalized_sources,
-            )
+                num_predict=token_budget,
+                num_ctx=context_budget,
+            ).strip()
+            if is_essay:
+                initial_answer = answer
+                initial_issues = essay_quality_issues(initial_answer, normalized_sources)
+                if initial_issues:
+                    logger.warning(
+                        "ship30_quality_retry session_id=%s initial_words=%d issues=%s",
+                        payload.session_id,
+                        len(initial_answer.split()),
+                        ",".join(initial_issues),
+                    )
+                    revised_answer = _call_with_optional_tool_callback(
+                        generate_reply,
+                        build_essay_revision_messages(
+                            messages,
+                            initial_answer,
+                            issues=initial_issues,
+                            sources=normalized_sources,
+                        ),
+                        on_tool_call=handle_tool_call,
+                        initial_sources=normalized_sources,
+                        num_predict=token_budget,
+                        num_ctx=context_budget,
+                    ).strip()
+                    _merge_tool_sources(normalized_sources, tool_sources)
+                    answer, selected_issues = select_better_essay(initial_answer, revised_answer, normalized_sources)
+                    logger.info(
+                        "ship30_draft_selection session_id=%s original_words=%d revised_words=%d selected_words=%d issues=%s",
+                        payload.session_id, len(initial_answer.split()), len(revised_answer.split()),
+                        len(answer.split()), ",".join(selected_issues) or "none",
+                    )
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             _merge_tool_sources(normalized_sources, tool_sources)
         except httpx.TimeoutException:

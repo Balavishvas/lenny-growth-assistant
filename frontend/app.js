@@ -13,12 +13,12 @@
     artifactView: $("#artifactView"), artifactText: $("#artifactText"), artifactName: $("#artifactName"),
     artifactWordCount: $("#artifactWordCount"), previewCanvas: $("#previewCanvas"), previewLabel: $("#previewLabel"),
     createArtifact: $("#createArtifact"), downloadArtifact: $("#downloadArtifact"), copyArtifact: $("#copyArtifact"),
-    settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle"), modelStatus: $("#modelStatus")
+    settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle"), modelStatus: $("#modelStatus"), ship30EssayButton: $("#ship30EssayButton")
   };
   const state = {
-    sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "",
+    sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "", provider: "ollama", claudeModel: "claude-sonnet-4-20250514",
     view: "chat", artifactTab: "markdown", artifactTitle: "Untitled growth brief",
-    artifactContent: "", busy: false, toastTimer: null, abortController: null
+    artifactContent: "", busy: false, toastTimer: null, artifactPreviewTimer: null, abortController: null
   };
   const STORE_KEY = "lenny-growth-assistant.workspace.v1";
   const THEME_KEY = "lenny-growth-assistant.theme.v1";
@@ -63,10 +63,10 @@
       const line = lines[lineIndex];
       const codeMatch = line.match(/^@@CODE(\d+)@@$/);
       if (codeMatch) { flushParagraph(); closeList(); closeQuote(); output.push(codeBlocks[Number(codeMatch[1])] || ""); continue; }
-      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      const heading = line.match(/^(#{1,6})\s+(.+)$/);
       const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
       const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
-      if (heading) { flushParagraph(); closeList(); closeQuote(); const level = heading[1].length; output.push(`<h${level}>${heading[2]}</h${level}>`); continue; }
+      if (heading) { flushParagraph(); closeList(); closeQuote(); const level = Math.min(heading[1].length, 6); output.push(`<h${level}>${heading[2]}</h${level}>`); continue; }
       if (unordered || ordered) {
         flushParagraph(); closeQuote(); const type = unordered ? "ul" : "ol";
         if (listType !== type) { closeList(); output.push(`<${type}>`); listType = type; }
@@ -241,7 +241,7 @@
       const response = await fetch(API + "/api/v1/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
-        body: JSON.stringify({ session_id: state.sessionId, message })
+        body: JSON.stringify({ session_id: state.sessionId, message, provider: state.provider, model: state.provider === "anthropic" ? state.claudeModel : null, api_key: state.provider === "anthropic" ? getClaudeKey() : null })
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -254,7 +254,7 @@
       let buffer = "";
       let streamError = null;
       const handleEvent = (rawEvent) => {
-        const data = rawEvent.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
+        const data = rawEvent.replace(/\r/g, "").split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
         if (!data) return;
         let event;
         try { event = JSON.parse(data); } catch { return; }
@@ -275,7 +275,7 @@
       while (true) {
         const { value, done } = await reader.read();
         buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-        const events = buffer.split("\n\n");
+        const events = buffer.split(/\r?\n\r?\n/);
         buffer = events.pop() || "";
         for (const rawEvent of events) handleEvent(rawEvent);
         if (done) break;
@@ -289,10 +289,12 @@
         model: completion?.model || "qwen2.5:7b",
         sources: completion?.sources || [],
         grounded: Boolean(completion?.grounded),
+        quality_issues: completion?.quality_issues || [],
         latency: completion ? { first_token_ms: firstTokenMs, retrieval_ms: completion.retrieval_ms, generation_ms: completion.generation_ms, total_ms: completion.total_ms } : { first_token_ms: firstTokenMs }
       };
       state.lastAnswer = finalMessage.content;
       renderMessages(); renderSources(completion?.sources || [], Boolean(completion?.grounded));
+      // Quality flags remain attached to the message for review/export, but do not interrupt the workspace with a prominent warning.
       const session = state.sessions.find((item) => item.id === state.sessionId) || { id: state.sessionId, created_at: new Date().toISOString() };
       upsertSession({ ...session, title: session.title === "New conversation" || !session.title ? shortTitle(message) : session.title, updated_at: new Date().toISOString() });
       if (completion) {
@@ -330,11 +332,28 @@
   function makeArtifactFromMessage(index) {
     const message = state.messages[index];
     if (!message || message.role !== "assistant") return;
-    const content = message.content || "";
-    const title = "Growth brief — " + new Date().toLocaleDateString();
-    setArtifactContent("# " + title + "\n\n" + content, title);
+    const answer = String(message.content || "").trim();
+    const heading = answer.match(/^#{1,2}\s+(.+)$/m);
+    const title = (heading?.[1] || "Growth brief").replace(/[*_`]/g, "").trim().slice(0, 100) || "Growth brief";
+    const sourceItems = Array.isArray(message.metadata?.sources) ? message.metadata.sources : [];
+    const sourceLines = sourceItems.map((source, sourceIndex) => {
+      const label = String(source.title || source.episode_title || source.guest || `Source ${sourceIndex + 1}`).replace(/[\[\]\n\r]/g, " ").trim();
+      const guest = source.guest ? ` — ${String(source.guest).replace(/[\n\r]/g, " ")}` : "";
+      let url = "";
+      try {
+        const parsed = new URL(String(source.url || source.source_url || ""));
+        if (["http:", "https:"].includes(parsed.protocol)) url = parsed.href;
+      } catch { /* Keep the source label without an unsafe or invalid link. */ }
+      return `- [${sourceIndex + 1}] ${url ? `[${label}](${url})` : label}${guest}`;
+    });
+    const content = sourceLines.length
+      ? `${answer}\n\n## Sources\n\n${sourceLines.join("\n")}\n`
+      : answer;
+    setArtifactContent(content, title);
     setView("artifacts");
-    showToast("Answer added to your artifact draft.");
+    showToast(sourceLines.length
+      ? `Answer added with ${sourceLines.length} source references.`
+      : "Answer added to your artifact draft.");
   }
   function renderArtifact() {
     const content = els.artifactText.value;
@@ -360,15 +379,47 @@
     }
   }
   async function copyText(value) {
-    try { await navigator.clipboard.writeText(value); showToast("Copied to clipboard."); }
-    catch { showToast("Clipboard access is unavailable in this browser."); }
+    const text = String(value ?? "");
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const helper = document.createElement("textarea");
+        helper.value = text; helper.setAttribute("readonly", "");
+        helper.style.position = "fixed"; helper.style.opacity = "0"; helper.style.pointerEvents = "none";
+        document.body.appendChild(helper); helper.select();
+        const copied = document.execCommand("copy"); helper.remove();
+        if (!copied) throw new Error("Copy command was rejected");
+      }
+      showToast("Artifact content copied.");
+    } catch {
+      showToast("Copy failed. Select the editor text and copy it manually.");
+    }
   }
   function downloadArtifact() {
+    const content = els.artifactText.value;
+    if (!content.trim()) { showToast("Add some content before exporting."); return; }
     const ext = state.artifactTab === "html" ? "html" : "md";
-    const blob = new Blob([els.artifactText.value], { type: ext === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
-    anchor.href = url; anchor.download = (state.artifactTitle || "growth-brief").replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() + "." + ext;
-    document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+    const mime = ext === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8";
+    let exportContent = content;
+    if (ext === "html" && !/<html[\s>]/i.test(content)) {
+      exportContent = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(state.artifactTitle || "Growth brief")}</title>
+<style>body{font:16px/1.7 system-ui,sans-serif;max-width:760px;margin:36px auto;padding:0 22px;color:#25261f}h1,h2,h3{line-height:1.25}a{color:#294ee8}img{max-width:100%}pre{overflow:auto;padding:12px;background:#f2f2ee}</style>
+</head><body>${content}</body></html>`;
+    }
+    const blob = new Blob(["\ufeff", exportContent], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const baseName = (state.artifactTitle || "growth-brief")
+      .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "growth-brief";
+    anchor.href = url; anchor.download = `${baseName}.${ext}`;
+    document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    // Delay revocation so browsers have time to start reading the generated Blob.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Exported ${ext.toUpperCase()} artifact.`);
   }
   function applyTheme(theme, save = true) {
     const selected = theme === "dark" ? "dark" : "light";
@@ -389,15 +440,45 @@
   function toggleTheme() {
     applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
   }
+  function getClaudeKey() {
+    try { return sessionStorage.getItem("lenny-growth-assistant.anthropic-key") || ""; }
+    catch { return ""; }
+  }
+  function setProvider(provider) {
+    state.provider = provider === "anthropic" ? "anthropic" : "ollama";
+    const mode = $("#modelMode");
+    if (mode) mode.value = state.provider;
+    if (state.provider === "anthropic" && !getClaudeKey()) {
+      const key = window.prompt("Enter your Anthropic API key. It stays in this browser tab and is sent only with Claude requests.");
+      if (key && key.trim()) {
+        try { sessionStorage.setItem("lenny-growth-assistant.anthropic-key", key.trim()); }
+        catch { showToast("This browser cannot store the key for this tab."); }
+      } else {
+        state.provider = "ollama";
+        if (mode) mode.value = "ollama";
+        showToast("Kept local Ollama selected; Claude needs an API key.");
+      }
+    }
+    try { sessionStorage.setItem("lenny-growth-assistant.provider", state.provider); } catch { /* Provider remains selected for this page. */ }
+    if (els.modelStatus) els.modelStatus.innerHTML = state.provider === "anthropic"
+      ? '<i class="status-dot"></i> Claude · API'
+      : '<i class="status-dot"></i> Local Ollama';
+    persist();
+  }
   async function loadModelStatus() {
     if (!els.modelStatus) return;
     try {
       const config = await api("/api/v1/config");
-      const provider = String(config.provider || "unknown");
+      const backendProvider = String(config.provider || "ollama");
       const model = String(config.model || "unknown");
-      const prettyModel = model.replace(/^qwen2\.5:(\d+)b$/i, "Qwen 2.5 $1B");
-      els.modelStatus.innerHTML = `<i class="status-dot"></i> ${escapeHtml(provider)} · ${escapeHtml(prettyModel)}`;
-      els.modelStatus.title = `Active backend model: ${model}`;
+      if (state.provider === "anthropic") {
+        els.modelStatus.innerHTML = '<i class="status-dot"></i> Claude · API';
+        els.modelStatus.title = "Claude requests use your tab-scoped Anthropic API key.";
+      } else {
+        const prettyModel = model.replace(/^qwen2\.5:(\d+)b$/i, "Qwen 2.5 $1B");
+        els.modelStatus.innerHTML = `<i class="status-dot"></i> ${escapeHtml(backendProvider)} · ${escapeHtml(prettyModel)}`;
+        els.modelStatus.title = `Active backend model: ${model}`;
+      }
     } catch (error) {
       els.modelStatus.textContent = "Model status unavailable";
       els.modelStatus.title = error.message;
@@ -423,6 +504,39 @@
     catch (error) { showToast("Could not create a session: " + error.message); }
   });
   els.sendButton.addEventListener("click", () => sendMessage());
+  els.ship30EssayButton?.addEventListener("click", () => {
+    if (state.busy) { showToast("Wait for the current response to finish first."); return; }
+    // Open an in-app topic composer rather than a browser prompt, so users can type freely.
+    const existing = $("#ship30Composer");
+    if (existing) { existing.querySelector("textarea")?.focus(); return; }
+    const panel = document.createElement("div");
+    panel.id = "ship30Composer";
+    panel.className = "ship30-composer-backdrop";
+    panel.innerHTML = `
+      <form class="ship30-composer" role="dialog" aria-modal="true" aria-labelledby="ship30ComposerTitle">
+        <div class="ship30-composer-kicker">SHIP 30 FOR 30 · WRITING WORKFLOW</div>
+        <h2 id="ship30ComposerTitle">What do you want to write about?</h2>
+        <p>Describe your topic, audience, and point of view. The assistant will build a source-grounded essay around your idea.</p>
+        <label for="ship30Topic">Essay topic or thesis</label>
+        <textarea id="ship30Topic" rows="4" placeholder="e.g. Why product-market fit should come before optimizing activation…" required></textarea>
+        <div class="ship30-composer-hint">Target: 1,400 words · Title, sections, takeaways, conclusion, and citations</div>
+        <div class="ship30-composer-actions"><button type="button" class="secondary-button" data-ship30-cancel>Cancel</button><button type="submit" class="primary-button">Generate essay ↗</button></div>
+      </form>`;
+    document.body.appendChild(panel);
+    const topicInput = panel.querySelector("#ship30Topic");
+    topicInput.focus();
+    panel.addEventListener("click", (event) => { if (event.target === panel) panel.remove(); });
+    panel.querySelector("[data-ship30-cancel]").addEventListener("click", () => panel.remove());
+    panel.querySelector("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const topic = topicInput.value.trim();
+      if (!topic) { topicInput.focus(); return; }
+      panel.remove();
+      const request = "Use the Ship 30 for 30 writing skill to write a complete 1,400-word essay about: " + topic +
+        ". Aim for 1,300–1,400 words, with a clear thesis, meaningful section headings, practical takeaways, a conclusion, and inline [number] citations tied only to retrieved Lenny transcript sources. Do not invent facts or citations. Return the essay itself, not a search summary.";
+      sendMessage(request);
+    });
+  });
   els.messageInput.addEventListener("input", resizeInput);
   els.messageInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendMessage(); }
@@ -456,13 +570,22 @@
   els.openSidebar.addEventListener("click", () => els.sidebar.classList.add("open"));
   els.closeSidebar.addEventListener("click", () => els.sidebar.classList.remove("open"));
   els.settingsButton.addEventListener("click", showSettings);
+  $("#modelMode")?.addEventListener("change", (event) => setProvider(event.target.value));
   els.themeToggle.addEventListener("click", toggleTheme);
   els.createArtifact.addEventListener("click", () => {
     const latest = [...state.messages].reverse().find((message) => message.role === "assistant");
     if (!latest) { showToast("Ask a question first, then turn the answer into a draft."); return; }
     makeArtifactFromMessage(state.messages.lastIndexOf(latest));
   });
-  els.artifactText.addEventListener("input", () => { renderArtifact(); persist(); });
+  els.artifactText.addEventListener("input", () => {
+    state.artifactContent = els.artifactText.value;
+    const trimmed = state.artifactContent.trim();
+    els.artifactWordCount.textContent = `${trimmed ? trimmed.split(/\\s+/).length : 0} words`;
+    persist();
+    // Keep typing responsive: update the expensive preview after the user pauses.
+    clearTimeout(state.artifactPreviewTimer);
+    state.artifactPreviewTimer = setTimeout(() => renderArtifact(), 140);
+  });
   document.querySelectorAll("[data-artifact-tab]").forEach((button) => button.addEventListener("click", () => {
     state.artifactTab = button.dataset.artifactTab; renderArtifact(); persist();
   }));
@@ -478,6 +601,8 @@
 
   async function init() {
     loadPersisted();
+    try { if (sessionStorage.getItem("lenny-growth-assistant.provider") === "anthropic" && getClaudeKey()) state.provider = "anthropic"; } catch { /* Default to local mode. */ }
+    if ($("#modelMode")) $("#modelMode").value = state.provider;
     loadModelStatus();
     let savedTheme = "light";
     try { savedTheme = localStorage.getItem(THEME_KEY) || "light"; } catch { /* Use light theme by default. */ }

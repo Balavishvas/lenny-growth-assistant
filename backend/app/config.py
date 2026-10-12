@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     llm_timeout_seconds: float = 60.0
     llm_num_predict: int = 384
+    llm_essay_num_predict: int = 2500
+    llm_essay_num_ctx: int = 8192
     ollama_keep_alive: str = "10m"
     cloud_llm_api_key: str | None = None
     cloud_llm_model: str | None = None
