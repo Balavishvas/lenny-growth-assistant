@@ -128,14 +128,7 @@ See [Demo and submission guide](docs/DEMO.md) for the camera-on recording run sh
 - [x] Research artifact editor with preview, copy, and export.
 - [x] Core development, architecture, frontend, decision-log, and demo documentation.
 
-### Final submission checklist
-
-- [x] Update the README and core project documentation on `feat/ship30-writing-workflow`.
-- [ ] Re-run the complete test suite on the exact commit being submitted; capture the output and SHA.
-- [ ] Manually smoke-test normal chat, source references, unsupported questions, Ship30 essay generation, and artifact export.
-- [ ] Verify the writing workflow's citation/quality checks on the final code and document any remaining warnings.
-- [ ] Record the 2–3 minute camera-on demo and add the shareable video link.
-- [ ] Review `git status`, recent commits, and the repository for secrets, local data, or generated artifacts before submission.
+#
 
 ## Documentation
 
