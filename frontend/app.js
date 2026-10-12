@@ -506,11 +506,36 @@
   els.sendButton.addEventListener("click", () => sendMessage());
   els.ship30EssayButton?.addEventListener("click", () => {
     if (state.busy) { showToast("Wait for the current response to finish first."); return; }
-    const topic = window.prompt("What should your 1,400-word Ship30 essay explore? Include the angle or thesis if you have one.");
-    if (!topic || !topic.trim()) return;
-    const request = "Use the Ship 30 for 30 writing skill to write a complete 1,400-word, source-grounded essay about: " + topic.trim() +
-      ". Aim for 1,300–1,400 words, with a clear thesis, meaningful section headings, practical takeaways, a conclusion, and inline [number] citations tied only to retrieved Lenny transcript sources. Do not invent facts or citations. Return the essay itself, not a search summary.";
-    sendMessage(request);
+    // Open an in-app topic composer rather than a browser prompt, so users can type freely.
+    const existing = $("#ship30Composer");
+    if (existing) { existing.querySelector("textarea")?.focus(); return; }
+    const panel = document.createElement("div");
+    panel.id = "ship30Composer";
+    panel.className = "ship30-composer-backdrop";
+    panel.innerHTML = `
+      <form class="ship30-composer" role="dialog" aria-modal="true" aria-labelledby="ship30ComposerTitle">
+        <div class="ship30-composer-kicker">SHIP 30 FOR 30 · WRITING WORKFLOW</div>
+        <h2 id="ship30ComposerTitle">What do you want to write about?</h2>
+        <p>Describe your topic, audience, and point of view. The assistant will build a source-grounded essay around your idea.</p>
+        <label for="ship30Topic">Essay topic or thesis</label>
+        <textarea id="ship30Topic" rows="4" placeholder="e.g. Why product-market fit should come before optimizing activation…" required></textarea>
+        <div class="ship30-composer-hint">Target: 1,400 words · Title, sections, takeaways, conclusion, and citations</div>
+        <div class="ship30-composer-actions"><button type="button" class="secondary-button" data-ship30-cancel>Cancel</button><button type="submit" class="primary-button">Generate essay ↗</button></div>
+      </form>`;
+    document.body.appendChild(panel);
+    const topicInput = panel.querySelector("#ship30Topic");
+    topicInput.focus();
+    panel.addEventListener("click", (event) => { if (event.target === panel) panel.remove(); });
+    panel.querySelector("[data-ship30-cancel]").addEventListener("click", () => panel.remove());
+    panel.querySelector("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const topic = topicInput.value.trim();
+      if (!topic) { topicInput.focus(); return; }
+      panel.remove();
+      const request = "Use the Ship 30 for 30 writing skill to write a complete 1,400-word essay about: " + topic +
+        ". Aim for 1,300–1,400 words, with a clear thesis, meaningful section headings, practical takeaways, a conclusion, and inline [number] citations tied only to retrieved Lenny transcript sources. Do not invent facts or citations. Return the essay itself, not a search summary.";
+      sendMessage(request);
+    });
   });
   els.messageInput.addEventListener("input", resizeInput);
   els.messageInput.addEventListener("keydown", (event) => {
