@@ -13,7 +13,7 @@
     artifactView: $("#artifactView"), artifactText: $("#artifactText"), artifactName: $("#artifactName"),
     artifactWordCount: $("#artifactWordCount"), previewCanvas: $("#previewCanvas"), previewLabel: $("#previewLabel"),
     createArtifact: $("#createArtifact"), downloadArtifact: $("#downloadArtifact"), copyArtifact: $("#copyArtifact"),
-    settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle"), modelStatus: $("#modelStatus")
+    settingsButton: $("#settingsButton"), themeToggle: $("#themeToggle"), modelStatus: $("#modelStatus"), ship30EssayButton: $("#ship30EssayButton")
   };
   const state = {
     sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "", provider: "ollama", claudeModel: "claude-sonnet-4-20250514",
@@ -504,6 +504,14 @@
     catch (error) { showToast("Could not create a session: " + error.message); }
   });
   els.sendButton.addEventListener("click", () => sendMessage());
+  els.ship30EssayButton?.addEventListener("click", () => {
+    if (state.busy) { showToast("Wait for the current response to finish first."); return; }
+    const topic = window.prompt("What should your 1,400-word Ship30 essay explore? Include the angle or thesis if you have one.");
+    if (!topic || !topic.trim()) return;
+    const request = "Use the Ship 30 for 30 writing skill to write a complete 1,400-word, source-grounded essay about: " + topic.trim() +
+      ". Aim for 1,300–1,400 words, with a clear thesis, meaningful section headings, practical takeaways, a conclusion, and inline [number] citations tied only to retrieved Lenny transcript sources. Do not invent facts or citations. Return the essay itself, not a search summary.";
+    sendMessage(request);
+  });
   els.messageInput.addEventListener("input", resizeInput);
   els.messageInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendMessage(); }
