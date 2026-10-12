@@ -86,7 +86,7 @@ def generate_agent_reply(
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
-        return generate_reply(messages, num_predict=num_predict, num_ctx=num_ctx)
+        return generate_reply(messages, num_predict=num_predict, **({"num_ctx": num_ctx} if num_ctx is not None else {}))
     if runtime != "pi":
         raise RuntimeError(f"Unsupported agent runtime: {runtime}")
 
@@ -167,7 +167,7 @@ def stream_agent_reply(
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s streaming=true", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
-        yield from stream_reply(messages, num_predict=num_predict, num_ctx=num_ctx)
+        yield from stream_reply(messages, num_predict=num_predict, **({"num_ctx": num_ctx} if num_ctx is not None else {}))
         return
     if runtime != "pi":
         raise RuntimeError(f"Unsupported agent runtime: {runtime}")
