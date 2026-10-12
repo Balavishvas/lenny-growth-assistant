@@ -215,3 +215,9 @@ def test_revision_prompt_targets_word_count_and_repairs_detected_issues_with_sou
     assert "Rahul Vohra" in prompt
     assert sources[0]["content"] in prompt
     assert revised[:2] == messages
+
+
+def test_essay_under_1100_words_triggers_revision_for_long_form_target():
+    draft = "# Product-Market Fit\n\n" + ("A grounded claim with evidence [1]. " * 250)
+    assert len(draft.split()) < 1100
+    assert "short_draft" in essay_quality_issues(draft)
