@@ -66,7 +66,8 @@ def essay_quality_issues(answer: str, sources: list[dict] | None = None) -> list
         issues.append("search_summary")
     words = re.findall(r"\b[\w’'-]+\b", text)
     has_title = bool(re.match(r"^\s{0,3}#{0,2}\s*[^\n]{8,120}\n", text))
-    if len(words) < 1000:
+    # For a 1,250–1,400-word workflow, anything below 1,100 words triggers a revision.
+    if len(words) < 1100:
         issues.append("short_draft")
     if not has_title:
         issues.append("missing_title")
