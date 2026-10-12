@@ -52,3 +52,91 @@
 .welcome-view{overflow:visible}
 @media(min-width:761px){.workspace-grid{min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}.chat-column{overflow:visible;min-height:100%}.welcome-view{flex:none}.messages-list{flex:none;overflow:visible}.composer-wrap{position:sticky;bottom:0;margin-top:auto;flex:none;padding-top:20px;background:linear-gradient(0deg,var(--paper-2) 82%,rgba(255,254,250,0))}.evidence-content{scrollbar-gutter:stable}.workspace-grid.evidence-hidden{overflow-y:auto}}
 @media(max-width:760px){.theme-toggle{font-size:0;padding:0 8px}.theme-label{display:none}.theme-glyph{font-size:16px}.welcome-view{overflow:visible}}
+
+
+/* Final polish: balanced dark evidence panel, subtle editorial color atmosphere, and model control. */
+:root {
+  --glow-blue: rgba(111, 145, 255, .13);
+  --glow-peach: rgba(255, 183, 157, .10);
+}
+.app-shell {
+  background:
+    radial-gradient(ellipse at 14% 0%, var(--glow-blue), transparent 38%),
+    radial-gradient(ellipse at 78% 8%, var(--glow-peach), transparent 34%),
+    var(--paper);
+}
+.main-panel, .chat-column {
+  background-color: transparent;
+}
+.workspace-grid, .artifact-view {
+  background:
+    radial-gradient(ellipse at 15% 0%, var(--glow-blue), transparent 45%),
+    radial-gradient(ellipse at 88% 4%, var(--glow-peach), transparent 40%),
+    var(--paper-2);
+}
+.evidence-panel {
+  background: var(--paper);
+  color: var(--ink);
+  border-left: 1px solid var(--line);
+}
+.evidence-panel .panel-heading,
+.evidence-panel .evidence-footer {
+  background: transparent;
+}
+.evidence-panel .grounding-status,
+.evidence-panel .source-card {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.evidence-panel .source-title,
+.evidence-panel .grounding-status strong {
+  color: var(--ink);
+}
+.evidence-panel .source-excerpt,
+.evidence-panel .source-guest,
+.evidence-panel .grounding-status span:not(.status-symbol) {
+  color: var(--muted);
+}
+:root[data-theme="dark"] .app-shell {
+  --glow-blue: rgba(93, 119, 255, .16);
+  --glow-peach: rgba(229, 142, 119, .09);
+}
+:root[data-theme="dark"] .main-panel,
+:root[data-theme="dark"] .chat-column {
+  background-color: transparent;
+}
+:root[data-theme="dark"] .workspace-grid,
+:root[data-theme="dark"] .artifact-view {
+  background:
+    radial-gradient(ellipse at 12% 0%, var(--glow-blue), transparent 46%),
+    radial-gradient(ellipse at 84% 0%, var(--glow-peach), transparent 38%),
+    var(--paper-2);
+}
+:root[data-theme="dark"] .evidence-panel {
+  background:
+    radial-gradient(ellipse at 80% 0%, rgba(111, 145, 255, .10), transparent 45%),
+    var(--paper);
+  color: var(--ink);
+}
+.model-mode-label {
+  font: 8px var(--mono);
+  letter-spacing: .7px;
+  color: var(--muted);
+}
+.model-mode {
+  max-width: 142px;
+  height: 31px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: 10px var(--sans);
+}
+.model-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media(max-width:760px) {
+  .model-mode-label { display: none; }
+  .model-mode { max-width: 104px; font-size: 9px; padding: 0 4px; }
+}
+/* Keep the chat clean; quality findings remain available in response metadata/logs. */
+.quality-warning, .quality-warning-banner, .quality-alert-banner, [data-quality-warning] { display: none !important; }
