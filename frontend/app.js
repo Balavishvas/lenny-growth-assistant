@@ -469,11 +469,16 @@
     if (!els.modelStatus) return;
     try {
       const config = await api("/api/v1/config");
-      const provider = String(config.provider || "unknown");
+      const backendProvider = String(config.provider || "ollama");
       const model = String(config.model || "unknown");
-      const prettyModel = model.replace(/^qwen2\.5:(\d+)b$/i, "Qwen 2.5 $1B");
-      els.modelStatus.innerHTML = `<i class="status-dot"></i> ${escapeHtml(provider)} · ${escapeHtml(prettyModel)}`;
-      els.modelStatus.title = `Active backend model: ${model}`;
+      if (state.provider === "anthropic") {
+        els.modelStatus.innerHTML = '<i class="status-dot"></i> Claude · API';
+        els.modelStatus.title = "Claude requests use your tab-scoped Anthropic API key.";
+      } else {
+        const prettyModel = model.replace(/^qwen2\.5:(\d+)b$/i, "Qwen 2.5 $1B");
+        els.modelStatus.innerHTML = `<i class="status-dot"></i> ${escapeHtml(backendProvider)} · ${escapeHtml(prettyModel)}`;
+        els.modelStatus.title = `Active backend model: ${model}`;
+      }
     } catch (error) {
       els.modelStatus.textContent = "Model status unavailable";
       els.modelStatus.title = error.message;
