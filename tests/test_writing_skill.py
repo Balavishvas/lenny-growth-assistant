@@ -186,3 +186,32 @@ def test_select_better_essay_rejects_empty_revision():
 
     assert selected == original
     assert issues == essay_quality_issues(original, None)
+
+
+def test_revision_prompt_targets_word_count_and_repairs_detected_issues_with_sources():
+    messages = [
+        {"role": "system", "content": "Use retrieved evidence."},
+        {"role": "user", "content": "Write a Ship 30 for 30 essay about PMF."},
+    ]
+    sources = [{
+        "title": "Finding Product-Market Fit",
+        "guest": "Rahul Vohra",
+        "url": "https://example.com/episode",
+        "content": "A team should ask users how they would feel if they could no longer use the product.",
+    }]
+
+    revised = build_essay_revision_messages(
+        messages,
+        "# Product-Market Fit\\n\\nA short draft.",
+        issues=["short_draft", "missing_citations"],
+        sources=sources,
+    )
+
+    prompt = revised[-1]["content"]
+    assert "1,300–1,400 words" in prompt
+    assert "Expand the essay substantially" in prompt
+    assert "Add inline bracket citations" in prompt
+    assert "[1] Finding Product-Market Fit" in prompt
+    assert "Rahul Vohra" in prompt
+    assert sources[0]["content"] in prompt
+    assert revised[:2] == messages
