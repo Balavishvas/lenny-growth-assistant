@@ -81,6 +81,9 @@ def _call_with_optional_tool_callback(
             call_kwargs["num_predict"] = num_predict
         if num_ctx is not None and ("num_ctx" in params or has_var_kw):
             call_kwargs["num_ctx"] = num_ctx
+        for optional_name in ("provider", "api_key", "model"):
+            if optional_name not in params and not has_var_kw:
+                call_kwargs.pop(optional_name, None)
     except (ValueError, TypeError):
         pass
 
