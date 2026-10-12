@@ -102,7 +102,7 @@ $env:PYTHONPATH = "backend"
 python -m pytest -q
 ```
 
-The latest reported full-suite run completed with **57 passed** after the writing-skill fixes. Re-run the suite against the exact final commit before submission and record the actual output, date, and commit SHA; that final verification takes precedence over this historical result.
+Test results are commit-specific. Run the full suite against the exact commit you submit, then record the actual output, date, and commit SHA in your submission notes. Do not treat an earlier passing run as verification of a later commit.
 
 ## How to try the main workflow
 
