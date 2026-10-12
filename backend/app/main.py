@@ -29,6 +29,7 @@ def generate_reply(
     on_tool_call: Callable | None = None,
     initial_sources: list[dict] | None = None,
     num_predict: int | None = None,
+    num_ctx: int | None = None,
 ) -> str:
     """Compatibility seam for existing tests and callers."""
     return generate_agent_reply(
@@ -36,6 +37,7 @@ def generate_reply(
         on_tool_call=on_tool_call,
         initial_sources=initial_sources,
         num_predict=num_predict,
+        num_ctx=num_ctx,
     )
 
 
@@ -44,6 +46,7 @@ def stream_reply(
     on_tool_call: Callable | None = None,
     initial_sources: list[dict] | None = None,
     num_predict: int | None = None,
+    num_ctx: int | None = None,
 ) -> Generator[str, None, None]:
     """Compatibility seam for existing streaming tests and callers."""
     yield from stream_agent_reply(
@@ -51,6 +54,7 @@ def stream_reply(
         on_tool_call=on_tool_call,
         initial_sources=initial_sources,
         num_predict=num_predict,
+        num_ctx=num_ctx,
     )
 
 
@@ -60,6 +64,7 @@ def _call_with_optional_tool_callback(
     on_tool_call=None,
     initial_sources=None,
     num_predict=None,
+    num_ctx=None,
     **kwargs,
 ):
     """Invoke callable passing optional callback, initial sources, and token budget only if accepted by signature or kwargs."""
@@ -74,6 +79,8 @@ def _call_with_optional_tool_callback(
             call_kwargs["initial_sources"] = initial_sources
         if num_predict is not None and ("num_predict" in params or has_var_kw):
             call_kwargs["num_predict"] = num_predict
+        if num_ctx is not None and ("num_ctx" in params or has_var_kw):
+            call_kwargs["num_ctx"] = num_ctx
     except (ValueError, TypeError):
         pass
 
@@ -407,6 +414,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
 
     is_essay = is_ship30_request(payload.message)
     token_budget = settings.llm_essay_num_predict if is_essay else settings.llm_num_predict
+    context_budget = settings.llm_essay_num_ctx if is_essay else None
 
     tool_call_count = 0
     tool_sources: list[dict] = []
@@ -438,6 +446,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     on_tool_call=handle_tool_call,
                     initial_sources=normalized_sources,
                     num_predict=token_budget,
+                    num_ctx=context_budget,
                 ))
                 initial_answer = "".join(first_tokens).strip()
                 if not initial_answer:
@@ -465,6 +474,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                         on_tool_call=handle_tool_call,
                         initial_sources=normalized_sources,
                         num_predict=token_budget,
+                        num_ctx=context_budget,
                     ).strip()
                     _merge_tool_sources(normalized_sources, tool_sources)
                     answer, quality_issues = select_better_essay(
@@ -500,6 +510,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     on_tool_call=handle_tool_call,
                     initial_sources=normalized_sources,
                     num_predict=token_budget,
+                    num_ctx=context_budget,
                 )
                 for token in stream_iter:
                     answer_parts.append(token)
@@ -615,6 +626,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
                 on_tool_call=handle_tool_call,
                 initial_sources=normalized_sources,
                 num_predict=token_budget,
+                num_ctx=context_budget,
             ).strip()
             if is_essay:
                 initial_answer = answer
