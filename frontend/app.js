@@ -18,7 +18,7 @@
   const state = {
     sessionId: null, sessions: [], messages: [], sources: [], grounded: false, lastAnswer: "",
     view: "chat", artifactTab: "markdown", artifactTitle: "Untitled growth brief",
-    artifactContent: "", busy: false, toastTimer: null, abortController: null
+    artifactContent: "", busy: false, toastTimer: null, artifactPreviewTimer: null, abortController: null
   };
   const STORE_KEY = "lenny-growth-assistant.workspace.v1";
   const THEME_KEY = "lenny-growth-assistant.theme.v1";
@@ -364,15 +364,39 @@
     }
   }
   async function copyText(value) {
-    try { await navigator.clipboard.writeText(value); showToast("Copied to clipboard."); }
-    catch { showToast("Clipboard access is unavailable in this browser."); }
+    const text = String(value ?? "");
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const helper = document.createElement("textarea");
+        helper.value = text; helper.setAttribute("readonly", "");
+        helper.style.position = "fixed"; helper.style.opacity = "0"; helper.style.pointerEvents = "none";
+        document.body.appendChild(helper); helper.select();
+        const copied = document.execCommand("copy"); helper.remove();
+        if (!copied) throw new Error("Copy command was rejected");
+      }
+      showToast("Artifact content copied.");
+    } catch {
+      showToast("Copy failed. Select the editor text and copy it manually.");
+    }
   }
   function downloadArtifact() {
+    const content = els.artifactText.value;
+    if (!content.trim()) { showToast("Add some content before exporting."); return; }
     const ext = state.artifactTab === "html" ? "html" : "md";
-    const blob = new Blob([els.artifactText.value], { type: ext === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
-    anchor.href = url; anchor.download = (state.artifactTitle || "growth-brief").replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() + "." + ext;
-    document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+    const mime = ext === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8";
+    const blob = new Blob(["\\ufeff", content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const baseName = (state.artifactTitle || "growth-brief")
+      .normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
+      .replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "growth-brief";
+    anchor.href = url; anchor.download = `${baseName}.${ext}`;
+    document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    // Delay revocation so browsers have time to start reading the generated Blob.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Exported ${ext.toUpperCase()} artifact.`);
   }
   function applyTheme(theme, save = true) {
     const selected = theme === "dark" ? "dark" : "light";
@@ -466,7 +490,15 @@
     if (!latest) { showToast("Ask a question first, then turn the answer into a draft."); return; }
     makeArtifactFromMessage(state.messages.lastIndexOf(latest));
   });
-  els.artifactText.addEventListener("input", () => { renderArtifact(); persist(); });
+  els.artifactText.addEventListener("input", () => {
+    state.artifactContent = els.artifactText.value;
+    const trimmed = state.artifactContent.trim();
+    els.artifactWordCount.textContent = `${trimmed ? trimmed.split(/\\s+/).length : 0} words`;
+    persist();
+    // Keep typing responsive: update the expensive preview after the user pauses.
+    clearTimeout(state.artifactPreviewTimer);
+    state.artifactPreviewTimer = setTimeout(() => renderArtifact(), 140);
+  });
   document.querySelectorAll("[data-artifact-tab]").forEach((button) => button.addEventListener("click", () => {
     state.artifactTab = button.dataset.artifactTab; renderArtifact(); persist();
   }));
