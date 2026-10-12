@@ -451,7 +451,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     logger.warning(
                         "ship30_stream_retry session_id=%s initial_words=%d issues=%s",
                         payload.session_id,
-                        len(re.findall(r"\\b[\\w’'-]+\\b", initial_answer)),
+                        len(re.findall(r"\b[\w’'-]+\b", initial_answer)),
                         ",".join(initial_issues),
                     )
                     revised_answer = _call_with_optional_tool_callback(
@@ -473,9 +473,9 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     logger.info(
                         "ship30_draft_selection session_id=%s original_words=%d revised_words=%d selected_words=%d issues=%s",
                         payload.session_id,
-                        len(re.findall(r"\\b[\\w’'-]+\\b", initial_answer)),
-                        len(re.findall(r"\\b[\\w’'-]+\\b", revised_answer)),
-                        len(re.findall(r"\\b[\\w’'-]+\\b", answer)),
+                        len(re.findall(r"\b[\w’'-]+\b", initial_answer)),
+                        len(re.findall(r"\b[\w’'-]+\b", revised_answer)),
+                        len(re.findall(r"\b[\w’'-]+\b", answer)),
                         ",".join(quality_issues) or "none",
                     )
 
@@ -484,8 +484,8 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                 for index in range(0, len(answer), chunk_size):
                     token = answer[index:index + chunk_size]
                     answer_parts.append(token)
-                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\\n\\n"
-                words_count = len(re.findall(r"\\b[\\w’'-]+\\b", answer)) or len(answer.split())
+                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
+                words_count = len(re.findall(r"\b[\w’'-]+\b", answer)) or len(answer.split())
                 logger.info(
                     "ship30_stream_quality session_id=%s first_token_streamed=true words=%d passed=%s issues=%s",
                     payload.session_id,
@@ -503,7 +503,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                 )
                 for token in stream_iter:
                     answer_parts.append(token)
-                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\\n\\n"
+                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
                 answer = "".join(answer_parts).strip()
                 if not answer:
                     raise ValueError("Model returned an empty response")
@@ -522,11 +522,11 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             total_ms = round((time.perf_counter() - started) * 1000, 2)
             logger.info("chat_stream_latency session_id=%s retrieval_ms=%.2f generation_ms=%.2f total_ms=%.2f sources=%d tool_invocations=%d", payload.session_id, retrieval_ms, generation_ms, total_ms, len(normalized_sources), tool_call_count)
-            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count, "quality_issues": quality_issues}) + "\\n\\n"
+            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count, "quality_issues": quality_issues}) + "\n\n"
         except Exception:
             db.rollback()
             logger.exception("chat_stream_failed session_id=%s", payload.session_id)
-            yield "data: " + json.dumps({"type": "error", "message": "Generation failed. Check the Ollama service and server logs."}) + "\\n\\n"
+            yield "data: " + json.dumps({"type": "error", "message": "Generation failed. Check the Ollama service and server logs."}) + "\n\n"
         finally:
             db.close()
 
