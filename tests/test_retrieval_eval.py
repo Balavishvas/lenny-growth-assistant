@@ -35,7 +35,9 @@ def test_macro_averaged_evaluation() -> None:
     assert scores["queries"] == 2
     assert scores["k"] == 2
     assert scores["precision_at_k"] == pytest.approx(0.5)
-    assert scores["recall_at_k"] == pytest.approx(0.5)
+    # Query A retrieves 1/2 relevant items; query B retrieves 1/1.
+    assert scores["recall_at_k"] == pytest.approx(0.75)
+    # First relevant item is at rank 1 for A and rank 2 for B.
     assert scores["mrr"] == pytest.approx(0.75)
 
 
