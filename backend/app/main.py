@@ -456,7 +456,12 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     )
                     revised_answer = _call_with_optional_tool_callback(
                         generate_reply,
-                        build_essay_revision_messages(messages, initial_answer),
+                        build_essay_revision_messages(
+                            messages,
+                            initial_answer,
+                            issues=initial_issues,
+                            sources=normalized_sources,
+                        ),
                         on_tool_call=handle_tool_call,
                         initial_sources=normalized_sources,
                         num_predict=token_budget,
@@ -623,7 +628,12 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
                     )
                     revised_answer = _call_with_optional_tool_callback(
                         generate_reply,
-                        build_essay_revision_messages(messages, initial_answer),
+                        build_essay_revision_messages(
+                        messages,
+                        initial_answer,
+                        issues=initial_issues,
+                        sources=normalized_sources,
+                    ),
                         on_tool_call=handle_tool_call,
                         initial_sources=normalized_sources,
                         num_predict=token_budget,
