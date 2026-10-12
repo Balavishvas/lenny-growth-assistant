@@ -80,9 +80,14 @@ def generate_agent_reply(
     initial_sources: list[dict] | None = None,
     num_predict: int | None = None,
     num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> str:
-    """Use Pi Coding Agent when selected; retain native Ollama as a fallback."""
+    """Use request-selected Claude directly, or the configured local runtime."""
     settings = get_settings()
+    if (provider or settings.llm_provider).lower().strip() == "anthropic":
+        return generate_reply(messages, num_predict=num_predict, num_ctx=num_ctx, provider="anthropic", api_key=api_key, model=model)
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
@@ -161,9 +166,15 @@ def stream_agent_reply(
     initial_sources: list[dict] | None = None,
     num_predict: int | None = None,
     num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> Iterator[str]:
-    """Stream output from the selected runtime while preserving the SSE token contract."""
+    """Stream request-selected Claude or the configured local runtime."""
     settings = get_settings()
+    if (provider or settings.llm_provider).lower().strip() == "anthropic":
+        yield from stream_reply(messages, num_predict=num_predict, num_ctx=num_ctx, provider="anthropic", api_key=api_key, model=model)
+        return
     runtime = settings.agent_runtime.lower().strip()
     logger.info("agent_runtime_selected runtime=%s model=%s streaming=true", runtime, settings.ollama_model)
     if runtime in {"ollama", "native"}:
