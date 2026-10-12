@@ -188,7 +188,7 @@ def stream_agent_reply(
             model=settings.ollama_model,
             no_session=True,
             extra_args=_pi_extra_args(),
-            env=_pi_env(initial_sources),
+            env=_pi_env(initial_sources, num_predict=num_predict, num_ctx=num_ctx),
         ) as pi:
             active_tool_calls: dict[str, dict] = {}
             with pi.stream(_to_prompt(messages)) as stream:
