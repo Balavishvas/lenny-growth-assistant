@@ -11,18 +11,20 @@ A grounded AI assistant for exploring ideas from Lenny Rachitsky's podcast and n
 - Vector similarity search exposed through `POST /api/v1/retrieval/search`.
 - RAG-powered chat that supplies retrieved passages to the local model, returns traceable source chunks, persists source metadata, and uses an honest fallback when retrieval finds no passages.
 - Responsive research workspace UI with conversation history, Markdown answer rendering, clickable source citations, and a side-by-side artifact editor/preview.
-- Tests for transcript chunking/parsing, chat grounding, source persistence, and unsupported-question fallback.
+- Dedicated Ship 30 for 30 writing workflow with conditional essay instructions and quality checks.
+- Deterministic retrieval metric helpers for Precision@K, Recall@K, and MRR, with unit tests.
 
 ## Architecture
 
 - **API:** Python + FastAPI
 - **Persistence:** PostgreSQL + pgvector
-- **Agent orchestration:** selectable Pi Coding Agent runtime through `pi-agent-python-sdk`, with a native Ollama fallback for local development\n- **Local chat model:** Ollama `qwen2.5:3b` (override via `.env`)
+- **Agent orchestration:** selectable Pi Coding Agent runtime through `pi-agent-python-sdk`, with a native Ollama fallback for local development
+- **Local chat model:** Ollama `qwen2.5:3b` (override via `.env`)
 - **Local embedding model:** Ollama `nomic-embed-text`
 - **Retrieval:** transcript ingestion, chunking, vector similarity search, and source attribution
 - **Frontend:** static HTML/CSS/JavaScript served by FastAPI at `/`; no Node.js build step required
 - **Artifacts:** browser-local editable Markdown/HTML drafts with sandboxed HTML preview and export
-- **Agent:** `AGENT_RUNTIME=pi` routes grounded chat through Pi Coding Agent; `AGENT_RUNTIME=ollama` retains the native Ollama adapter. Pi requires Node.js and a configured Pi CLI model provider.\n- **Ship 30 for 30 writing workflow:** dedicated essay instructions are conditionally injected for explicit long-form writing requests; runtime verification is pending.
+- **Writing workflow:** `backend/app/skills/ship_30_for_30.md` is conditionally loaded by `backend/app/writing_skill.py` for explicit long-form essay requests.
 
 ## Quick start
 
@@ -43,22 +45,30 @@ Index your local transcript corpus:
 python -m app.ingest_cli
 ```
 
-To use Pi Coding Agent, install Node.js 22.19+ and Pi CLI 0.85.1+ (`npm install -g @earendil-works/pi-coding-agent@0.87.1`), configure a local Ollama-compatible model in Pi, install requirements, then set `AGENT_RUNTIME=pi` in `.env`. Start with `AGENT_RUNTIME=ollama` until the Pi CLI is configured and verified.\n\nThe external transcript corpus is intentionally excluded from Git. Download it locally and ensure you comply with the source repository's terms. Never commit your `.env` file or real credentials.
+To use Pi Coding Agent, install Node.js 22.19+ and Pi CLI 0.85.1+ (`npm install -g @earendil-works/pi-coding-agent@0.87.1`), configure a local Ollama-compatible model in Pi, install requirements, then set `AGENT_RUNTIME=pi` in `.env`. Start with `AGENT_RUNTIME=ollama` until the Pi CLI is configured and verified.
+
+The external transcript corpus is intentionally excluded from Git. Download it locally and ensure you comply with the source repository's terms. Never commit your `.env` file or real credentials.
 
 ## Test RAG chat
 
 Create a session with `POST /api/v1/sessions`, then send a message to `POST /api/v1/chat` using the returned `session_id`. The response includes an `answer`, a `grounded` flag, and a `sources` array containing the passages supplied to the model. If retrieval returns no passages, the API returns a transparent fallback instead of asking the model to guess.
 
+## Tests
+
+Run the deterministic unit suite from the repository root:
+
+```powershell
+$env:PYTHONPATH = "backend"
+python -m pytest -q
+```
+
+The retrieval metric helpers are in `backend/app/retrieval_eval.py`; tests in `tests/test_retrieval_eval.py` cover ranking metrics and edge cases. These tests verify metric calculations, **not** retrieval quality on the real transcript corpus. A corpus-level benchmark still requires a curated fixed set of queries and relevant chunk/source identifiers.
+
 ## Next milestones
 
-- [ ] Add retrieval evaluation with a fixed query/expected-source set (Recall@K, MRR, Precision@K).
-- [x] Add the dedicated Ship 30 for 30 writing workflow and unit tests; verify essay quality with the configured local model.
+- [ ] Add a curated fixed query/expected-source benchmark and run it against the indexed transcript corpus.
 - [ ] Add server-side artifact persistence and comprehensive frontend end-to-end tests.
 - [ ] Add provider controls, Docker Compose, handoff documentation, and demo recording.
-
-## Dedicated writing workflow
-
-The Ship 30 for 30 workflow lives in `backend/app/skills/ship_30_for_30.md` and is loaded by `backend/app/writing_skill.py` for explicit essay-writing requests. It targets roughly 1,250 words, enforces a coherent narrative arc and practical takeaways, and preserves retrieval-grounding and citation rules. Tests are in `tests/test_writing_skill.py`. The integration is on the `feat/ship30-writing-workflow` branch and still needs local test/runtime verification before merge.
 
 ## Project documents
 
