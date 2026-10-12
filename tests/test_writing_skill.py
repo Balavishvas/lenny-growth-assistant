@@ -214,6 +214,9 @@ def test_revision_prompt_targets_word_count_and_repairs_detected_issues_with_sou
     assert "[1] Finding Product-Market Fit" in prompt
     assert "Rahul Vohra" in prompt
     assert sources[0]["content"] in prompt
+    assert "SOURCE-FIRST REVISION RULES" in prompt
+    assert "Every substantive paragraph" in prompt
+    assert prompt.index("[1] Finding Product-Market Fit") < prompt.index("Previous draft to improve")
     assert revised[:2] == messages
 
 
