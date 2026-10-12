@@ -137,25 +137,62 @@ def essay_needs_revision(answer: str) -> bool:
 
 
 def build_essay_revision_messages(
-    messages: list[dict[str, str]], draft: str
+    messages: list[dict[str, str]],
+    draft: str,
+    issues: list[str] | None = None,
+    sources: list[dict] | None = None,
 ) -> list[dict[str, str]]:
-    """Ask the same grounded model to repair a clearly incomplete first draft."""
+    """Ask the model to repair a draft using explicit quality failures and retrieved evidence."""
+    issue_list = list(issues or essay_quality_issues(draft, sources))
+    issue_guidance = {
+        "short_draft": "Expand the essay substantially to 1,300–1,400 words. Add new analysis, trade-offs, concrete implications, and actionable takeaways; do not pad by repeating the thesis.",
+        "missing_citations": "Add inline bracket citations to every material transcript-derived factual claim. Use only the source numbers already present in the original conversation's retrieved evidence.",
+        "citation_out_of_range": "Remove invalid citation numbers and cite only source indexes that exist in the original retrieved evidence.",
+        "unverified_direct_quote": "Remove or paraphrase any direct quotation that cannot be verified word-for-word in the supplied transcript passages.",
+        "missing_title": "Start with the requested, descriptive Markdown H1 title.",
+        "search_summary": "Write a finished argumentative essay, not a report of search activity or a summary of retrieved passages.",
+        "thesis_contradiction": "Make the body consistent with the requested thesis; do not argue the opposite of the title.",
+        "malformed_markdown": "Use valid Markdown headings and remove literal backslashes before heading markers.",
+    }
+    targeted_fixes = "\\n".join(
+        f"- {issue}: {issue_guidance.get(issue, 'Fix this detected quality issue without inventing facts or sources.')}"
+        for issue in issue_list
+    ) or "- Improve clarity, evidence use, completeness, and structure while preserving factual grounding."
+    evidence_blocks: list[str] = []
+    for index, source in enumerate(sources or [], start=1):
+        if not isinstance(source, dict):
+            continue
+        content = str(source.get("content") or "").strip()
+        if not content:
+            continue
+        title = str(source.get("title") or "Untitled source")
+        guest = str(source.get("guest") or "").strip()
+        url = str(source.get("url") or "").strip()
+        header = f"[{index}] {title}"
+        if guest:
+            header += f" — guest: {guest}"
+        if url:
+            header += f"\\nSource URL: {url}"
+        evidence_blocks.append(f"{header}\\nPassage: {content[:5000]}")
+    evidence_section = (
+        "\\n\\nRetrieved evidence available for revision (keep these original citation indexes):\\n"
+        + "\\n\\n".join(evidence_blocks)
+        if evidence_blocks else
+        "\\n\\nUse only the retrieved evidence already present in the conversation. If it does not support a claim, narrow or omit that claim."
+    )
     revision = (
-        "QUALITY-CONTROL RETRY: The previous attempt failed one or more deterministic essay checks. "
-        "Rewrite it as a complete, polished Ship 30 for 30 essay, not a summary of search results. "
-        "Target 1,100–1,400 words. Start with a clear title, use valid Markdown headings (for example, "
-        "'## Heading' with no backslash before the hashes), develop one coherent thesis, include "
-        "specific actionable takeaways, and end with a memorable conclusion. Every material claim "
-        "about a transcript must cite its actual supplied source number like [2]. Only use citation "
-        "numbers present in the supplied evidence; never invent sources, quotes, metrics, or guest "
-        "attributions. Separate transcript-supported facts from your interpretation. Do not add "
-        "citations merely to satisfy the checker: they must support the nearby claim. Avoid generic "
-        "openers, repetition, and filler. Return only the revised essay.\n\n"
-        "Previous draft to improve:\n"
+        "QUALITY-CONTROL RETRY: The previous draft failed these checks:\\n"
+        + targeted_fixes
+        + "\\n\\nRewrite the draft as a complete, polished Ship 30 for 30 essay. Target 1,300–1,400 words, "
+        "with a specific thesis, 4–6 meaningful sections, concrete reasoning, trade-offs, and 3–5 useful takeaways. "
+        "Do not add filler or repeat the same point to hit length. Every material factual claim about a transcript "
+        "must cite the existing source number (for example [1]); never invent citations, sources, quotations, metrics, "
+        "or speaker attributions. Prefer paraphrase over an uncertain direct quote. Return only the finished essay.\\n\\n"
+        "Previous draft to improve:\\n"
         + draft
+        + evidence_section
     )
     return [*messages, {"role": "user", "content": revision}]
-
 
 def enforce_essay_output_contract(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     """Place a concise, high-priority output contract directly in the final user turn."""
