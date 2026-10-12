@@ -620,6 +620,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
             messages = enforce_essay_output_contract(messages)
             is_essay = is_ship30_request(payload.message)
             token_budget = settings.llm_essay_num_predict if is_essay else settings.llm_num_predict
+            context_budget = settings.llm_essay_num_ctx if is_essay else None
             answer = _call_with_optional_tool_callback(
                 generate_reply,
                 messages,
@@ -641,14 +642,15 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> dict:
                     revised_answer = _call_with_optional_tool_callback(
                         generate_reply,
                         build_essay_revision_messages(
-                        messages,
-                        initial_answer,
-                        issues=initial_issues,
-                        sources=normalized_sources,
-                    ),
+                            messages,
+                            initial_answer,
+                            issues=initial_issues,
+                            sources=normalized_sources,
+                        ),
                         on_tool_call=handle_tool_call,
                         initial_sources=normalized_sources,
                         num_predict=token_budget,
+                        num_ctx=context_budget,
                     ).strip()
                     _merge_tool_sources(normalized_sources, tool_sources)
                     answer, selected_issues = select_better_essay(initial_answer, revised_answer, normalized_sources)
