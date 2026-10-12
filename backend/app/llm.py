@@ -8,13 +8,16 @@ import httpx
 from app.config import get_settings
 
 
-def generate_reply(messages: list[dict[str, str]], num_predict: int | None = None) -> str:
+def generate_reply(messages: list[dict[str, str]], num_predict: int | None = None, num_ctx: int | None = None) -> str:
     """Send conversation messages to the configured local Ollama model."""
     settings = get_settings()
     if settings.llm_provider.lower() != "ollama":
         raise RuntimeError(f"Unsupported LLM provider: {settings.llm_provider}")
 
     predict_tokens = num_predict if num_predict is not None else settings.llm_num_predict
+    options: dict[str, int] = {"num_predict": predict_tokens}
+    if num_ctx is not None:
+        options["num_ctx"] = num_ctx
     url = f"{settings.ollama_base_url.rstrip('/')}/api/chat"
     response = httpx.post(
         url,
@@ -23,7 +26,7 @@ def generate_reply(messages: list[dict[str, str]], num_predict: int | None = Non
             "messages": messages,
             "stream": False,
             "keep_alive": settings.ollama_keep_alive,
-            "options": {"num_predict": predict_tokens},
+            "options": options,
         },
         timeout=settings.llm_timeout_seconds,
     )
@@ -35,7 +38,7 @@ def generate_reply(messages: list[dict[str, str]], num_predict: int | None = Non
     return answer.strip()
 
 
-def stream_reply(messages: list[dict[str, str]], num_predict: int | None = None) -> Iterator[str]:
+def stream_reply(messages: list[dict[str, str]], num_predict: int | None = None, num_ctx: int | None = None) -> Iterator[str]:
     """Yield generated text chunks from Ollama's newline-delimited streaming response."""
     settings = get_settings()
     if settings.llm_provider.lower() != "ollama":
