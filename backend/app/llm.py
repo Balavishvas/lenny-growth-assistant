@@ -45,6 +45,9 @@ def stream_reply(messages: list[dict[str, str]], num_predict: int | None = None,
         raise RuntimeError(f"Unsupported LLM provider: {settings.llm_provider}")
 
     predict_tokens = num_predict if num_predict is not None else settings.llm_num_predict
+    options: dict[str, int] = {"num_predict": predict_tokens}
+    if num_ctx is not None:
+        options["num_ctx"] = num_ctx
     url = f"{settings.ollama_base_url.rstrip('/')}/api/chat"
     with httpx.stream(
         "POST",
@@ -54,7 +57,7 @@ def stream_reply(messages: list[dict[str, str]], num_predict: int | None = None,
             "messages": messages,
             "stream": True,
             "keep_alive": settings.ollama_keep_alive,
-            "options": {"num_predict": predict_tokens},
+            "options": options,
         },
         timeout=settings.llm_timeout_seconds,
     ) as response:
