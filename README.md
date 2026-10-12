@@ -2,15 +2,15 @@
 
 A local-first, evidence-grounded research workspace for exploring product, growth, and startup ideas in Lenny Rachitsky's podcast/newsletter corpus. Built as a Forward Deployed Engineer take-home assessment.
 
-> **Assessment status:** This repository documents the implemented workflow and its known limits. See [Known limitations and verification](docs/DECISIONS_AND_LOG.md) for what has and has not been validated. Do not interpret the presence of a UI control as proof every provider or output-quality path passes end-to-end checks.
+> **Assessment status:** Core research chat, retrieval, the Ship 30 for 30 writing workflow, and browser-local artifact editing are implemented. The remaining work is final-commit verification, the camera-on demo, and submission evidence. See [Known limitations and verification](docs/DECISIONS_AND_LOG.md) for caveats; do not treat a UI control as proof that every provider or output-quality path passes end-to-end checks.
 
 ## What it does
 
-- **Research chat:** send questions through a FastAPI backend and use retrieved transcript passages as evidence.
+- **Research chat:** ask questions through FastAPI and use retrieved transcript passages as evidence.
 - **Source traceability:** return source metadata with retrieved passages and show source references in the workspace.
 - **Local-first model path:** use Ollama for local generation and Nomic Embed Text for embeddings.
 - **Persistent data:** PostgreSQL stores application data; pgvector supports transcript-vector similarity search.
-- **Writing workflow:** a dedicated Ship 30 for 30 topic composer invokes the long-form essay instructions for explicit essay requests.
+- **Writing workflow:** a dedicated Ship 30 for 30 topic composer invokes long-form essay instructions for explicit essay requests.
 - **Research artifacts:** edit assistant output as Markdown/HTML, preview it in the browser, copy it, and export it as a file. Drafts are browser-local, not a server-side artifact repository.
 - **Retrieval evaluation primitives:** deterministic Precision@K, Recall@K, and MRR helpers with unit tests.
 
@@ -20,7 +20,7 @@ A local-first, evidence-grounded research workspace for exploring product, growt
 Browser UI (HTML / CSS / JavaScript)
         │ same-origin HTTP + streaming chat
         ▼
-FastAPI application ─────── Session / message persistence
+FastAPI application ───── Session / message persistence
         │                              │
         ├── Retrieval service ─── PostgreSQL + pgvector
         │                              ▲
@@ -95,14 +95,14 @@ The corpus is intentionally excluded from Git. Confirm you have permission to us
 
 ## Tests
 
-Run the unit/integration test suite from the repository root with the environment active:
+Run the test suite from the repository root with the environment active:
 
 ```powershell
 $env:PYTHONPATH = "backend"
 python -m pytest -q
 ```
 
-Some API/database tests require PostgreSQL to be available. Capture the exact output and the commit SHA for the final submission. A previously reported run had 54 passing tests and one Starlette/httpx deprecation warning; that historical result is not a substitute for testing the final commit.
+The latest reported full-suite run completed with **57 passed** after the writing-skill fixes. Re-run the suite against the exact final commit before submission and record the actual output, date, and commit SHA; that final verification takes precedence over this historical result.
 
 ## How to try the main workflow
 
@@ -111,10 +111,30 @@ Some API/database tests require PostgreSQL to be available. Capture the exact ou
 3. Inspect the returned source references and open a source card.
 4. Ask a follow-up in the same conversation.
 5. Use **Ship30 essay**, enter a topic, and generate a long-form draft.
-6. Inspect the citation quality and word count; treat any quality warning as a limitation to investigate.
+6. Inspect citations, word count, and any quality-check result; report warnings honestly.
 7. Open the artifact editor, review the preview, and test copy/export.
 
 See [Demo and submission guide](docs/DEMO.md) for the camera-on recording run sheet.
+
+## Implementation status
+
+### Completed
+
+- [x] FastAPI backend, session/message persistence, and local Ollama chat.
+- [x] PostgreSQL + pgvector transcript storage, ingestion, embeddings, and similarity retrieval.
+- [x] RAG chat with source attribution and a transparent no-evidence fallback.
+- [x] Retrieval metric helpers for Precision@K, Recall@K, and MRR, with unit tests.
+- [x] Dedicated Ship 30 for 30 writing workflow.
+- [x] Research artifact editor with preview, copy, and export.
+- [x] Core development, architecture, frontend, decision-log, and demo documentation.
+
+### Final submission checklist
+
+- [ ] Re-run the complete test suite on the exact commit being submitted; capture the output and SHA.
+- [ ] Manually smoke-test normal chat, source references, unsupported questions, Ship30 essay generation, and artifact export.
+- [ ] Verify the writing workflow's citation/quality checks on the final code and document any remaining warnings.
+- [ ] Record the 2–3 minute camera-on demo and add the shareable video link.
+- [ ] Review `git status`, recent commits, and the repository for secrets, local data, or generated artifacts before submission.
 
 ## Documentation
 
@@ -127,11 +147,11 @@ See [Demo and submission guide](docs/DEMO.md) for the camera-on recording run sh
 
 ## Known limitations
 
-- A previous live essay generation produced a 1,279-word draft after retrieving five sources, but the deterministic checker reported `missing_citations`. Citation validation must not be described as fully resolved until the exact current code passes a reproduction.
-- Retrieval metric helpers are unit-tested, but a curated benchmark of real corpus queries and expected relevant chunk/source IDs has not been reported.
+- Retrieval metric helpers have deterministic unit tests, but a curated benchmark of real corpus queries and expected relevant chunk/source IDs has not been reported.
 - Artifact drafts are stored in browser localStorage rather than a durable server-side artifact service.
-- Frontend end-to-end coverage is incomplete; provider switching, citation behavior, long-form writing, and exports require manual verification.
+- Frontend end-to-end coverage is incomplete; provider switching, citation behavior, long-form writing, and exports still require manual verification.
 - Local operation depends on PostgreSQL/pgvector and Ollama. A visible cloud-provider selector does not mean every cloud route has been validated.
+- Long-form generation latency and citation quality can vary by model, topic, and local hardware; report results from the exact final build rather than assuming quality from the presence of the workflow.
 
 ## Assessment principles
 
