@@ -184,14 +184,19 @@ def build_essay_revision_messages(
     revision = (
         "QUALITY-CONTROL RETRY: The previous draft failed these checks:\n"
         + targeted_fixes
-        + "\n\nRewrite the draft as a complete, polished Ship 30 for 30 essay, not a summary of search results. The acceptable quality-check range is 1,100–1,400 words; target 1,300–1,400 words for this retry, "
-        "with a specific thesis, 4–6 meaningful sections, concrete reasoning, trade-offs, and 3–5 useful takeaways. "
-        "Do not add filler or repeat the same point to hit length. Every material factual claim about a transcript "
-        "must cite the existing source number (for example [1]); never invent citations, sources, quotations, metrics, "
-        "or speaker attributions. Prefer paraphrase over an uncertain direct quote. Return only the finished essay.\n\n"
-        "Previous draft to improve:\n"
-        + draft
+        + "\n\nSOURCE-FIRST REVISION RULES: The retrieved evidence below is the only source of podcast-specific facts. "
+        "Read it before revising. Cite claims with the exact one-based source index shown in each evidence header. "
+        "Never guess an index, invent a citation, or cite a source that does not support the adjacent claim. "
+        "If a claim cannot be supported by these passages, remove it or label it clearly as general analysis. "
+        "Do not invent quotes, metrics, dates, or speaker attributions. Avoid direct quotes unless the exact words "
+        "appear in the passage. Put citations inline immediately after the supported claim, e.g. [1]. "
+        "Every substantive paragraph containing podcast-derived facts must include at least one valid citation. "
+        "Do not add filler or repeat the thesis to hit length. Write a polished, argumentative Ship 30 for 30 essay, "
+        "not a search summary, with a clear thesis, 4–6 meaningful sections, trade-offs, and 3–5 actionable takeaways. "
+        "Target 1,300–1,400 words; 1,100–1,400 words is the acceptable quality-check range. Return only the essay.\n\n"
         + evidence_section
+        + "\n\nPrevious draft to improve (preserve useful reasoning, but fix every listed issue):\n"
+        + draft
     )
     return [*messages, {"role": "user", "content": revision}]
 
