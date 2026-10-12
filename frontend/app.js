@@ -459,6 +459,7 @@
         showToast("Kept local Ollama selected; Claude needs an API key.");
       }
     }
+    try { sessionStorage.setItem("lenny-growth-assistant.provider", state.provider); } catch { /* Provider remains selected for this page. */ }
     if (els.modelStatus) els.modelStatus.innerHTML = state.provider === "anthropic"
       ? '<i class="status-dot"></i> Claude · API'
       : '<i class="status-dot"></i> Local Ollama';
