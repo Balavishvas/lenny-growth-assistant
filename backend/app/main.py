@@ -30,6 +30,9 @@ def generate_reply(
     initial_sources: list[dict] | None = None,
     num_predict: int | None = None,
     num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> str:
     """Compatibility seam for existing tests and callers."""
     return generate_agent_reply(
@@ -38,6 +41,9 @@ def generate_reply(
         initial_sources=initial_sources,
         num_predict=num_predict,
         num_ctx=num_ctx,
+        provider=provider,
+        api_key=api_key,
+        model=model,
     )
 
 
@@ -47,6 +53,9 @@ def stream_reply(
     initial_sources: list[dict] | None = None,
     num_predict: int | None = None,
     num_ctx: int | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> Generator[str, None, None]:
     """Compatibility seam for existing streaming tests and callers."""
     yield from stream_agent_reply(
@@ -55,6 +64,9 @@ def stream_reply(
         initial_sources=initial_sources,
         num_predict=num_predict,
         num_ctx=num_ctx,
+        provider=provider,
+        api_key=api_key,
+        model=model,
     )
 
 
