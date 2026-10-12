@@ -405,7 +405,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             session.updated_at = models.utc_now()
             db.commit()
             yield "data: " + json.dumps({"type": "token", "text": answer}) + "\n\n"
-            yield "data: " + json.dumps({"type": "done", "sources": [], "grounded": False, "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": 0, "total_ms": round((time.perf_counter() - started) * 1000, 2), "tool_invocations": 0}) + "\n\n"
+            yield "data: " + json.dumps({"type": "done", "sources": [], "grounded": False, "provider": payload.provider, "model": payload.model or (settings.ollama_model if payload.provider == "ollama" else "claude-sonnet-4-20250514"), "retrieval_ms": retrieval_ms, "generation_ms": 0, "total_ms": round((time.perf_counter() - started) * 1000, 2), "tool_invocations": 0}) + "\n\n"
         return StreamingResponse(no_evidence_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     system_prompt = apply_writing_skill(_build_system_prompt(sources), payload.message)
@@ -527,7 +527,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                 session_id=payload.session_id,
                 role="assistant",
                 content=answer,
-                message_metadata={"provider": settings.llm_provider, "model": settings.ollama_model, "sources": normalized_sources, "grounded": bool(normalized_sources), "tool_invocations": tool_call_count, "quality_issues": quality_issues},
+                message_metadata={"provider": payload.provider, "model": payload.model or (settings.ollama_model if payload.provider == "ollama" else "claude-sonnet-4-20250514"), "sources": normalized_sources, "grounded": bool(normalized_sources), "tool_invocations": tool_call_count, "quality_issues": quality_issues},
             )
             db.add(assistant_message)
             session.updated_at = models.utc_now()
