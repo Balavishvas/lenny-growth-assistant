@@ -2,7 +2,26 @@
 
 ## 1. Status and intent
 
-This is the proposed architecture for the Lenny Growth Assistant assessment. The initial implementation should validate high-risk integrations early and evolve from a small vertical slice. Component names below describe responsibilities, not a claim that the code already exists.
+This document distinguishes the current assessment implementation from the target architecture. Some sections below describe intended boundaries and future work; they must not be read as proof every endpoint or capability is complete.
+
+### Current implementation snapshot
+
+- Static HTML/CSS/JavaScript frontend is served by FastAPI; no Node.js frontend build is required.
+- FastAPI exposes health/session/chat/retrieval flows and persists application data in PostgreSQL.
+- Transcript ingestion chunks source files and stores embedding vectors in PostgreSQL with pgvector.
+- Ollama is the primary local model/embedding path; an agent runtime integration is configurable.
+- The workspace presents answers and source metadata, an artifact editor with browser-local drafts, a provider selector, and a dedicated Ship 30 for 30 essay entry point.
+- Precision@K, Recall@K, and MRR helper functions have deterministic unit tests.
+
+### Explicitly not claimed as complete
+
+- No curated, published corpus-level retrieval benchmark is claimed.
+- Browser end-to-end coverage is incomplete.
+- Artifact drafts are not a durable server-side artifact store.
+- A previous live essay run reported `missing_citations`; citation correctness requires a successful reproduction on the final commit.
+- A provider selector is not proof that every provider/model combination works.
+
+For experiment evidence and caveats, see [DECISIONS_AND_LOG.md](DECISIONS_AND_LOG.md).
 
 ## 2. System context
 
@@ -41,7 +60,7 @@ Responsibilities:
 - Apply timeouts and map internal failures to safe API errors.
 - Keep HTTP concerns separate from agent/retrieval logic.
 
-Proposed endpoint surface (final paths may change as the implementation is built):
+The current endpoint surface includes the health, session, chat, and retrieval routes described in the README and development guide. The following are target API responsibilities; verify the live OpenAPI schema at `/docs` before assuming every example route is implemented:
 - `GET /health` — application liveness; dependency readiness may be reported separately.
 - `POST /api/v1/sessions` — create a session.
 - `GET /api/v1/sessions/{session_id}` — retrieve session metadata and history.
@@ -177,7 +196,7 @@ Example response:
 }
 ```
 
-These are illustrative contracts, not implemented schemas. Do not include a source in the response unless it was actually retrieved and used.
+This is an illustrative contract, not a guarantee of the exact current response schema. Verify the actual schema in `/docs`. Do not include a source in the response unless it was actually retrieved and used.
 
 ## 6. Configuration
 
