@@ -447,6 +447,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     initial_sources=normalized_sources,
                     num_predict=token_budget,
                     num_ctx=context_budget,
+                    provider=payload.provider, api_key=payload.api_key, model=payload.model,
                 ))
                 initial_answer = "".join(first_tokens).strip()
                 if not initial_answer:
@@ -475,6 +476,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                         initial_sources=normalized_sources,
                         num_predict=token_budget,
                         num_ctx=context_budget,
+                        provider=payload.provider, api_key=payload.api_key, model=payload.model,
                     ).strip()
                     _merge_tool_sources(normalized_sources, tool_sources)
                     answer, quality_issues = select_better_essay(
@@ -511,6 +513,7 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     initial_sources=normalized_sources,
                     num_predict=token_budget,
                     num_ctx=context_budget,
+                    provider=payload.provider, api_key=payload.api_key, model=payload.model,
                 )
                 for token in stream_iter:
                     answer_parts.append(token)
