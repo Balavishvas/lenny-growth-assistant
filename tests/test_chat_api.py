@@ -445,6 +445,8 @@ def test_stream_chat_ship30_logs_quality_issues_on_short_draft(monkeypatch, capl
         yield short_draft
 
     monkeypatch.setattr(main, "stream_reply", fake_stream)
+    # The quality retry is deterministic in this unit test; do not call a live model.
+    monkeypatch.setattr(main, "generate_reply", lambda messages, **kwargs: short_draft)
 
     with caplog.at_level(logging.INFO, logger="lenny.latency"):
         response = client.post(
