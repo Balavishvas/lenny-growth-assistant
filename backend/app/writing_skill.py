@@ -183,7 +183,7 @@ def build_essay_revision_messages(
     revision = (
         "QUALITY-CONTROL RETRY: The previous draft failed these checks:\n"
         + targeted_fixes
-        + "\n\nRewrite the draft as a complete, polished Ship 30 for 30 essay. Target 1,300–1,400 words, "
+        + "\n\nRewrite the draft as a complete, polished Ship 30 for 30 essay, not a summary of search results. The acceptable quality-check range is 1,100–1,400 words; target 1,300–1,400 words for this retry, "
         "with a specific thesis, 4–6 meaningful sections, concrete reasoning, trade-offs, and 3–5 useful takeaways. "
         "Do not add filler or repeat the same point to hit length. Every material factual claim about a transcript "
         "must cite the existing source number (for example [1]); never invent citations, sources, quotations, metrics, "
