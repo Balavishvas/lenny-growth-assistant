@@ -130,6 +130,7 @@ See [Demo and submission guide](docs/DEMO.md) for the camera-on recording run sh
 
 ### Final submission checklist
 
+- [x] Update the README and core project documentation on `feat/ship30-writing-workflow`.
 - [ ] Re-run the complete test suite on the exact commit being submitted; capture the output and SHA.
 - [ ] Manually smoke-test normal chat, source references, unsupported questions, Ship30 essay generation, and artifact export.
 - [ ] Verify the writing workflow's citation/quality checks on the final code and document any remaining warnings.
