@@ -218,6 +218,6 @@ def test_revision_prompt_targets_word_count_and_repairs_detected_issues_with_sou
 
 
 def test_essay_under_1100_words_triggers_revision_for_long_form_target():
-    draft = "# Product-Market Fit\n\n" + ("A grounded claim with evidence [1]. " * 250)
+    draft = "# Product-Market Fit\n\n" + ("A grounded claim with evidence [1]. " * 150)
     assert len(draft.split()) < 1100
     assert "short_draft" in essay_quality_issues(draft)
