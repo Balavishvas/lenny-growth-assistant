@@ -45,6 +45,9 @@ class SessionDetail(SessionRead):
 class ChatRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=36)
     message: str = Field(min_length=1, max_length=30000)
+    provider: Literal["ollama", "anthropic"] = "ollama"
+    model: str | None = Field(default=None, min_length=1, max_length=120)
+    api_key: str | None = Field(default=None, min_length=10, max_length=500)
 
 
 class ChatResponse(BaseModel):
