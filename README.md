@@ -140,17 +140,6 @@ Re-run tests on the exact final commit before submission and report the actual o
 
 See [docs/DEMO.md](docs/DEMO.md) for the 2–3 minute camera-on demo run sheet.
 
-## Final submission checklist
-
-- [ ] Run the full test suite on the exact final commit and record the output.
-- [ ] Smoke-test health endpoints, grounded chat, source references, and unsupported-question behavior.
-- [ ] Test Ship30 essay generation and review citation/quality warnings.
-- [ ] Test artifact editing, preview, copy, and export.
-- [ ] If using Pi or any optional provider, verify it separately; otherwise demonstrate the tested Ollama path.
-- [ ] Confirm `.env`, API keys, transcript dumps, database backups, and generated model artifacts are not committed.
-- [ ] Review `git status --short`, recent commits, and the final commit SHA.
-- [ ] Record the 2–3 minute camera-on demo and add the shareable video link to the submission materials.
-
 ## Documentation
 
 - [Product requirements](docs/PRD.md)
