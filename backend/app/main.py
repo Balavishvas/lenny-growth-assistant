@@ -425,31 +425,62 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             tool_sources.append(item)
 
     def events():
-        answer_parts = []
+        answer_parts: list[str] = []
         quality_issues: list[str] = []
         generation_started = time.perf_counter()
         try:
-            # Stream Ship 30 essays as they are generated instead of buffering a full draft
-            # and potentially running a second full generation before showing any text.
-            # Quality checks are diagnostic here: once tokens are shown, retrying would duplicate output.
-            stream_iter = _call_with_optional_tool_callback(
-                stream_reply,
-                messages,
-                on_tool_call=handle_tool_call,
-                initial_sources=normalized_sources,
-                num_predict=token_budget,
-            )
-            for token in stream_iter:
-                answer_parts.append(token)
-                yield "data: " + json.dumps({"type": "token", "text": token}) + "\n\n"
-            answer = "".join(answer_parts).strip()
-            if not answer:
-                raise ValueError("Model returned an empty response")
-            _merge_tool_sources(normalized_sources, tool_sources)
-
             if is_essay:
-                quality_issues = essay_quality_issues(answer, normalized_sources)
-                words_count = len(re.findall(r"\b[\w’'-]+\b", answer)) or len(answer.split())
+                # Buffer essays until quality checks and one possible revision finish.
+                # This prevents showing a short first draft and then duplicating it with a retry.
+                first_tokens = list(_call_with_optional_tool_callback(
+                    stream_reply,
+                    messages,
+                    on_tool_call=handle_tool_call,
+                    initial_sources=normalized_sources,
+                    num_predict=token_budget,
+                ))
+                initial_answer = "".join(first_tokens).strip()
+                if not initial_answer:
+                    raise ValueError("Model returned an empty response")
+                _merge_tool_sources(normalized_sources, tool_sources)
+                initial_issues = essay_quality_issues(initial_answer, normalized_sources)
+                answer = initial_answer
+                quality_issues = initial_issues
+
+                if initial_issues:
+                    logger.warning(
+                        "ship30_stream_retry session_id=%s initial_words=%d issues=%s",
+                        payload.session_id,
+                        len(re.findall(r"\\b[\\w’'-]+\\b", initial_answer)),
+                        ",".join(initial_issues),
+                    )
+                    revised_answer = _call_with_optional_tool_callback(
+                        generate_reply,
+                        build_essay_revision_messages(messages, initial_answer),
+                        on_tool_call=handle_tool_call,
+                        initial_sources=normalized_sources,
+                        num_predict=token_budget,
+                    ).strip()
+                    _merge_tool_sources(normalized_sources, tool_sources)
+                    answer, quality_issues = select_better_essay(
+                        initial_answer, revised_answer, normalized_sources
+                    )
+                    logger.info(
+                        "ship30_draft_selection session_id=%s original_words=%d revised_words=%d selected_words=%d issues=%s",
+                        payload.session_id,
+                        len(re.findall(r"\\b[\\w’'-]+\\b", initial_answer)),
+                        len(re.findall(r"\\b[\\w’'-]+\\b", revised_answer)),
+                        len(re.findall(r"\\b[\\w’'-]+\\b", answer)),
+                        ",".join(quality_issues) or "none",
+                    )
+
+                # Only the selected, quality-checked draft is sent to the client.
+                chunk_size = 64
+                for index in range(0, len(answer), chunk_size):
+                    token = answer[index:index + chunk_size]
+                    answer_parts.append(token)
+                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\\n\\n"
+                words_count = len(re.findall(r"\\b[\\w’'-]+\\b", answer)) or len(answer.split())
                 logger.info(
                     "ship30_stream_quality session_id=%s first_token_streamed=true words=%d passed=%s issues=%s",
                     payload.session_id,
@@ -457,6 +488,21 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
                     not quality_issues,
                     ",".join(quality_issues) or "none",
                 )
+            else:
+                stream_iter = _call_with_optional_tool_callback(
+                    stream_reply,
+                    messages,
+                    on_tool_call=handle_tool_call,
+                    initial_sources=normalized_sources,
+                    num_predict=token_budget,
+                )
+                for token in stream_iter:
+                    answer_parts.append(token)
+                    yield "data: " + json.dumps({"type": "token", "text": token}) + "\\n\\n"
+                answer = "".join(answer_parts).strip()
+                if not answer:
+                    raise ValueError("Model returned an empty response")
+                _merge_tool_sources(normalized_sources, tool_sources)
 
             assistant_message = ChatMessage(
                 session_id=payload.session_id,
@@ -471,11 +517,11 @@ def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> Streamin
             generation_ms = round((time.perf_counter() - generation_started) * 1000, 2)
             total_ms = round((time.perf_counter() - started) * 1000, 2)
             logger.info("chat_stream_latency session_id=%s retrieval_ms=%.2f generation_ms=%.2f total_ms=%.2f sources=%d tool_invocations=%d", payload.session_id, retrieval_ms, generation_ms, total_ms, len(normalized_sources), tool_call_count)
-            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count, "quality_issues": quality_issues}) + "\n\n"
+            yield "data: " + json.dumps({"type": "done", "sources": normalized_sources, "grounded": bool(normalized_sources), "provider": settings.llm_provider, "model": settings.ollama_model, "retrieval_ms": retrieval_ms, "generation_ms": generation_ms, "total_ms": total_ms, "tool_invocations": tool_call_count, "quality_issues": quality_issues}) + "\\n\\n"
         except Exception:
             db.rollback()
             logger.exception("chat_stream_failed session_id=%s", payload.session_id)
-            yield "data: " + json.dumps({"type": "error", "message": "Generation failed. Check the Ollama service and server logs."}) + "\n\n"
+            yield "data: " + json.dumps({"type": "error", "message": "Generation failed. Check the Ollama service and server logs."}) + "\\n\\n"
         finally:
             db.close()
 
