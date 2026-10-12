@@ -192,7 +192,7 @@ def build_essay_revision_messages(
         "appear in the passage. Put citations inline immediately after the supported claim, e.g. [1]. "
         "Every substantive paragraph containing podcast-derived facts must include at least one valid citation. "
         "Do not add filler or repeat the thesis to hit length. Write a polished, argumentative Ship 30 for 30 essay, "
-        "not a search summary, with a clear thesis, 4–6 meaningful sections, trade-offs, and 3–5 actionable takeaways. "
+        "not a summary of search results or a search report, with a clear thesis, 4–6 meaningful sections, trade-offs, and 3–5 actionable takeaways. "
         "Target 1,300–1,400 words; 1,100–1,400 words is the acceptable quality-check range. Return only the essay.\n\n"
         + evidence_section
         + "\n\nPrevious draft to improve (preserve useful reasoning, but fix every listed issue):\n"
