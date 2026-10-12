@@ -334,11 +334,28 @@
   function makeArtifactFromMessage(index) {
     const message = state.messages[index];
     if (!message || message.role !== "assistant") return;
-    const content = message.content || "";
-    const title = "Growth brief — " + new Date().toLocaleDateString();
-    setArtifactContent("# " + title + "\n\n" + content, title);
+    const answer = String(message.content || "").trim();
+    const heading = answer.match(/^#{1,2}\\s+(.+)$/m);
+    const title = (heading?.[1] || "Growth brief").replace(/[*_`]/g, "").trim().slice(0, 100) || "Growth brief";
+    const sourceItems = Array.isArray(message.metadata?.sources) ? message.metadata.sources : [];
+    const sourceLines = sourceItems.map((source, sourceIndex) => {
+      const label = String(source.title || source.episode_title || source.guest || `Source ${sourceIndex + 1}`).replace(/[\\[\\]\\n\\r]/g, " ").trim();
+      const guest = source.guest ? ` — ${String(source.guest).replace(/[\\n\\r]/g, " ")}` : "";
+      let url = "";
+      try {
+        const parsed = new URL(String(source.url || source.source_url || ""));
+        if (["http:", "https:"].includes(parsed.protocol)) url = parsed.href;
+      } catch { /* Keep the source label without an unsafe or invalid link. */ }
+      return `- [${sourceIndex + 1}] ${url ? `[${label}](${url})` : label}${guest}`;
+    });
+    const content = sourceLines.length
+      ? `${answer}\\n\\n## Sources\\n\\n${sourceLines.join("\\n")}\\n`
+      : answer;
+    setArtifactContent(content, title);
     setView("artifacts");
-    showToast("Answer added to your artifact draft.");
+    showToast(sourceLines.length
+      ? `Answer added with ${sourceLines.length} source references.`
+      : "Answer added to your artifact draft.");
   }
   function renderArtifact() {
     const content = els.artifactText.value;
@@ -386,7 +403,15 @@
     if (!content.trim()) { showToast("Add some content before exporting."); return; }
     const ext = state.artifactTab === "html" ? "html" : "md";
     const mime = ext === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8";
-    const blob = new Blob(["\\ufeff", content], { type: mime });
+    let exportContent = content;
+    if (ext === "html" && !/<html[\\s>]/i.test(content)) {
+      exportContent = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(state.artifactTitle || "Growth brief")}</title>
+<style>body{font:16px/1.7 system-ui,sans-serif;max-width:760px;margin:36px auto;padding:0 22px;color:#25261f}h1,h2,h3{line-height:1.25}a{color:#294ee8}img{max-width:100%}pre{overflow:auto;padding:12px;background:#f2f2ee}</style>
+</head><body>${content}</body></html>`;
+    }
+    const blob = new Blob(["\\ufeff", exportContent], { type: mime });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     const baseName = (state.artifactTitle || "growth-brief")
